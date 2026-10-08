@@ -364,3 +364,25 @@ func (c *Client) DownloadAttachment(ctx context.Context, id string, w io.Writer,
 	}
 	return n, nil
 }
+
+// GetIssueFields fetches one issue with only the given fields.
+func (c *Client) GetIssueFields(ctx context.Context, key string, fields []string) (*Issue, error) {
+	p, err := issuePath(key)
+	if err != nil {
+		return nil, err
+	}
+	var issue Issue
+	if err := c.do(ctx, http.MethodGet, p, url.Values{"fields": {strings.Join(fields, ",")}}, nil, &issue); err != nil {
+		return nil, err
+	}
+	return &issue, nil
+}
+
+// AssignIssue sets the assignee by account ID.
+func (c *Client) AssignIssue(ctx context.Context, key, accountID string) error {
+	p, err := issuePath(key, "/assignee")
+	if err != nil {
+		return err
+	}
+	return c.do(ctx, http.MethodPut, p, nil, map[string]string{"accountId": accountID}, nil)
+}
