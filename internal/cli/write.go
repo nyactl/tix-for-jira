@@ -77,7 +77,7 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 		Use:   "update <key>",
 		Short: "Change fields; you confirm by typing the ticket key",
 		Example: `  tix-jira update PROJ-1 --set "Summary=New title" --set "Labels=auth,urgent"
-  tix-jira update PROJ-1 --set "Description=- step one\n- step two"`,
+  tix-jira update PROJ-1 --set "Description=$(cat notes.md)"`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			sets, _ := cmd.Flags().GetStringArray("set")

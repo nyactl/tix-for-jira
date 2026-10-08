@@ -136,6 +136,9 @@ func TestReads(t *testing.T) {
 	if !strings.Contains(out, "**PROJ-1** [To Do] Mine") || strings.Contains(out, "PROJ-2") {
 		t.Errorf("mine = %q", out)
 	}
+	if _, _, err := e.run(t, "mine", "--since", "-1d"); err != nil {
+		t.Errorf("mine --since -1d: %v", err)
+	}
 	out, _, err = e.run(t, "show", "PROJ-1", "--json")
 	if err != nil {
 		t.Fatal(err)
