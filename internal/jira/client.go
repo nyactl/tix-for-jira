@@ -57,9 +57,17 @@ type Client struct {
 	sleep     func(context.Context, time.Duration) error
 }
 
+// Option customises a Client.
+type Option func(*Client)
+
+// WithTransport sets the HTTP transport, e.g. to trust a test server.
+func WithTransport(rt http.RoundTripper) Option {
+	return func(c *Client) { c.http.Transport = rt }
+}
+
 // New returns a client for site (already normalised to https://host).
-func New(site, email, token, version string) *Client {
-	return &Client{
+func New(site, email, token, version string, opts ...Option) *Client {
+	c := &Client{
 		site:      strings.TrimRight(site, "/"),
 		auth:      "Basic " + base64.StdEncoding.EncodeToString([]byte(email+":"+token)),
 		userAgent: "tix-jira/" + version,
@@ -69,6 +77,10 @@ func New(site, email, token, version string) *Client {
 		},
 		sleep: sleepCtx,
 	}
+	for _, o := range opts {
+		o(c)
+	}
+	return c
 }
 
 // Site returns the base URL, e.g. https://team.atlassian.net.

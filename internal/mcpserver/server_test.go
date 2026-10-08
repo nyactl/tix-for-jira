@@ -34,7 +34,7 @@ func connect(t *testing.T, writes bool, mode config.PrivacyMode, answer string, 
 	t.Helper()
 	ctx := context.Background()
 	h := &harness{fake: site(t)}
-	svc, err := core.New(ctx, jira.New(h.fake.URL(), "me@example.com", "tok-me", "test"), mode)
+	svc, err := core.New(ctx, jira.New(h.fake.URL(), "me@example.com", "tok-me", "test", jira.WithTransport(h.fake.Transport())), mode)
 	if err != nil {
 		t.Fatal(err)
 	}

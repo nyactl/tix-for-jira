@@ -50,7 +50,7 @@ func fixture(t *testing.T) *jiratest.Fake {
 
 func service(t *testing.T, f *jiratest.Fake, mode config.PrivacyMode) *Service {
 	t.Helper()
-	s, err := New(context.Background(), jira.New(f.URL(), "me@example.com", "tok-me", "test"), mode)
+	s, err := New(context.Background(), jira.New(f.URL(), "me@example.com", "tok-me", "test", jira.WithTransport(f.Transport())), mode)
 	if err != nil {
 		t.Fatal(err)
 	}

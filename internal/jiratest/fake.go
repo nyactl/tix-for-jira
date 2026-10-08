@@ -126,12 +126,16 @@ func New(t testing.TB) *Fake {
 	f.AddUser(User{AccountID: "acc-me", DisplayName: "Max Mustermann", Email: "me@example.com", Token: "tok-me"})
 	f.AddUser(User{AccountID: "acc-alice", DisplayName: "Alice Smith", Email: "alice@example.com", Token: "tok-alice"})
 	f.AddUser(User{AccountID: "acc-bob", DisplayName: "Bob Jones", Email: "bob@example.com", Token: "tok-bob"})
-	f.srv = httptest.NewServer(http.HandlerFunc(f.serve))
+	f.srv = httptest.NewTLSServer(http.HandlerFunc(f.serve))
 	t.Cleanup(f.srv.Close)
 	return f
 }
 
+// URL is the https base URL of the fake site.
 func (f *Fake) URL() string { return f.srv.URL }
+
+// Transport trusts the fake site's test certificate.
+func (f *Fake) Transport() http.RoundTripper { return f.srv.Client().Transport }
 
 func (f *Fake) AddUser(u User) {
 	f.mu.Lock()
