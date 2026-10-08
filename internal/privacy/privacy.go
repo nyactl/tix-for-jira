@@ -73,11 +73,13 @@ func (p *People) ID(accountID, display, email string) string {
 func (p *People) remember(accountID, display, email string) string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	// The first non-empty name wins: mention nodes carry a free-form text
+	// that must not replace the real name learned from structured data.
 	display = strings.TrimPrefix(display, "@")
-	if display != "" {
+	if display != "" && p.display[accountID] == "" {
 		p.display[accountID] = display
 	}
-	if email != "" {
+	if email != "" && p.email[accountID] == "" {
 		p.email[accountID] = email
 	}
 	if l, ok := p.label[accountID]; ok && (p.mode == config.PrivacyOwn || accountID == p.me || l == p.display[accountID]) {
