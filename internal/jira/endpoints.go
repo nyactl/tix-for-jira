@@ -282,7 +282,7 @@ func (c *Client) CreateIssue(ctx context.Context, fields map[string]any) (string
 		return "", err
 	}
 	if out.Key == "" {
-		return "", errors.New("Jira did not return the new issue key")
+		return "", errors.New("no issue key in Jira's response")
 	}
 	return out.Key, nil
 }

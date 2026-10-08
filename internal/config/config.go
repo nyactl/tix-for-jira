@@ -52,7 +52,7 @@ func Load() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	data, err := os.ReadFile(p)
+	data, err := os.ReadFile(p) //nolint:gosec // G304: the path is the user's own config location
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, ErrNotConfigured
 	}

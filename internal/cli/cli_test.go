@@ -102,7 +102,7 @@ func TestLoginRejectsBadTokenAndStoresNothing(t *testing.T) {
 	e.tty.answers = []string{"me@example.com", ""}
 	e.tty.secrets = []string{"wrong"}
 	_, _, err := e.run(t, "auth", "login", "--site", e.fake.URL())
-	if err == nil || !strings.Contains(err.Error(), "rejected the credentials") {
+	if err == nil || !strings.Contains(err.Error(), "credentials rejected by Jira") {
 		t.Fatalf("err = %v", err)
 	}
 	if _, err := config.Load(); !errors.Is(err, config.ErrNotConfigured) {

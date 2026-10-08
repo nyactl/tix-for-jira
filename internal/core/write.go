@@ -548,7 +548,7 @@ func (s *Service) verifyLink(ctx context.Context, key, other, typeName string, o
 			return fmt.Sprintf("Linked: %s %s %s.", key, phrase, other), nil
 		}
 		if (outward && l.InwardIssue != nil && l.InwardIssue.Key == other) || (!outward && l.OutwardIssue != nil && l.OutwardIssue.Key == other) {
-			return "", fmt.Errorf("Jira recorded the %s link between %s and %s in the opposite direction; please correct it in Jira", typeName, key, other)
+			return "", fmt.Errorf("the %s link between %s and %s was recorded in the opposite direction; please correct it in Jira", typeName, key, other)
 		}
 	}
 	return fmt.Sprintf("Linked %s %s %s (link not visible yet).", key, phrase, other), nil

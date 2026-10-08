@@ -28,7 +28,7 @@ type devTTY struct{}
 func open() (*os.File, error) {
 	f, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 	if err != nil {
-		return nil, fmt.Errorf("%w (%v)", errNoTerminal, err)
+		return nil, fmt.Errorf("%w (%w)", errNoTerminal, err)
 	}
 	return f, nil
 }

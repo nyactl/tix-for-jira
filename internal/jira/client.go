@@ -27,7 +27,7 @@ const (
 )
 
 var (
-	ErrUnauthorized = errors.New("Jira rejected the credentials: the API token may be expired or revoked; create a new one at https://id.atlassian.com/manage-profile/security/api-tokens and run `tix-jira auth login`")
+	ErrUnauthorized = errors.New("credentials rejected by Jira: the API token may be expired or revoked; create a new one at https://id.atlassian.com/manage-profile/security/api-tokens and run `tix-jira auth login`")
 	ErrNotFound     = errors.New("not found, or you do not have permission to see it")
 )
 
