@@ -35,14 +35,14 @@ type site struct {
 
 func setup(t *testing.T) *site {
 	t.Helper()
-	if os.Getenv("TIX_JIRA_CONFIG") == "" {
-		t.Fatal("set TIX_JIRA_CONFIG to the test site's config file (see integration/README.md)")
+	if os.Getenv("TIX_JIRA_PROFILE") == "" && os.Getenv("TIX_JIRA_CONFIG") == "" {
+		t.Fatal("set TIX_JIRA_PROFILE to the test site's profile (see integration/README.md)")
 	}
 	project, other := os.Getenv("TIX_JIRA_IT_PROJECT"), os.Getenv("TIX_JIRA_IT_OTHER")
 	if project == "" || other == "" {
 		t.Fatal("set TIX_JIRA_IT_PROJECT and TIX_JIRA_IT_OTHER (see integration/README.md)")
 	}
-	cfg, err := config.Load()
+	cfg, err := config.Load("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,10 +251,139 @@ func TestIntegration(t *testing.T) {
 		}
 	})
 
-	t.Run("custom fields and editable fields render", func(t *testing.T) {
+	t.Run("subtask", func(t *testing.T) {
+		msg := applied(t)(s.svc.PlanCreate(ctx, core.CreateInput{Project: s.project, Type: "Subtask", Summary: "tix-jira integration subtask " + s.run, Parent: a}))
+		var sub string
+		if _, err := fmt.Sscanf(msg, "Created %s", &sub); err != nil {
+			t.Fatalf("unexpected create result %q", msg)
+		}
+		sub = strings.TrimSuffix(sub, ":")
+		d, err := s.svc.Issue(ctx, sub)
+		if err != nil || d.Parent == nil || d.Parent.Key != a || d.Assignee != "Me" {
+			t.Errorf("subtask = %+v, %v", d, err)
+		}
+		parent, _ := s.svc.Issue(ctx, a)
+		if !hasLink(parent.Subtasks, "subtask", sub) {
+			t.Errorf("parent subtasks = %+v", parent.Subtasks)
+		}
+	})
+
+	t.Run("transition with comment", func(t *testing.T) {
+		ts, err := s.svc.Transitions(ctx, b)
+		if err != nil || len(ts) == 0 {
+			t.Fatalf("transitions = %+v, %v", ts, err)
+		}
+		d, _ := s.svc.Issue(ctx, b)
+		var target string
+		for _, tr := range ts {
+			if tr.To != d.Status {
+				target = tr.To
+				break
+			}
+		}
+		note := "Moved by the integration test " + s.run
+		applied(t)(s.svc.PlanTransition(ctx, b, target, note))
+		cs, err := s.svc.Comments(ctx, b, 20)
+		if err != nil || len(cs) == 0 || cs[len(cs)-1].Body != note {
+			t.Errorf("comments = %+v, %v", cs, err)
+		}
+	})
+
+	t.Run("custom number field and due date", func(t *testing.T) {
 		fs, err := s.svc.EditableFields(ctx, a)
 		if err != nil || len(fs) == 0 {
-			t.Errorf("editable fields = %+v, %v", fs, err)
+			t.Fatalf("editable fields = %+v, %v", fs, err)
+		}
+		var number, due string
+		for _, f := range fs {
+			switch {
+			case f.Type == "number" && number == "":
+				number = f.Name
+			case strings.HasPrefix(f.Type, "date (") && due == "":
+				due = f.Name
+			}
+		}
+		var changes []core.FieldInput
+		if number != "" {
+			changes = append(changes, core.FieldInput{Field: number, Value: "3"})
+		}
+		if due != "" {
+			changes = append(changes, core.FieldInput{Field: due, Value: "2026-12-31"})
+		}
+		if len(changes) == 0 {
+			t.Skip("no editable number or date field on the test ticket")
+		}
+		applied(t)(s.svc.PlanUpdate(ctx, a, changes))
+		d, err := s.svc.Issue(ctx, a)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if due != "" && d.Due != "2026-12-31" {
+			t.Errorf("due = %q", d.Due)
+		}
+		if number != "" {
+			found := false
+			for _, fv := range d.Fields {
+				found = found || (fv.Name == number && fv.Value == "3")
+			}
+			if !found {
+				t.Logf("%s not shown among custom fields (it may be a system field): %+v", number, d.Fields)
+			}
+		}
+	})
+
+	t.Run("worklog with start time", func(t *testing.T) {
+		start := time.Now().Add(-2 * time.Hour).Format("2006-01-02 15:04")
+		applied(t)(s.svc.PlanWorklog(ctx, a, "30m", start, ""))
+		ws, err := s.svc.Worklogs(ctx, a, 10)
+		if err != nil || len(ws) == 0 || ws[len(ws)-1].Started != start || ws[len(ws)-1].TimeSpent != "30m" {
+			t.Errorf("worklogs = %+v, %v (want start %s)", ws, err, start)
+		}
+	})
+
+	t.Run("symmetric link", func(t *testing.T) {
+		applied(t)(s.svc.PlanLink(ctx, b, "relates to", a))
+		db, _ := s.svc.Issue(ctx, b)
+		if !hasLink(db.Links, "relates to", a) {
+			t.Errorf("links of %s = %+v", b, db.Links)
+		}
+	})
+
+	t.Run("history lists my changes", func(t *testing.T) {
+		hist, err := s.svc.History(ctx, a, "-1h", 100)
+		if err != nil || len(hist) < 3 {
+			t.Fatalf("history = %+v, %v", hist, err)
+		}
+		for _, h := range hist {
+			if h.Author != "Me" {
+				t.Errorf("unexpected author %q in my own ticket's history", h.Author)
+			}
+		}
+	})
+
+	t.Run("other people are placeholders", func(t *testing.T) {
+		key, name := os.Getenv("TIX_JIRA_IT_PEOPLE_ISSUE"), os.Getenv("TIX_JIRA_IT_OTHER_NAME")
+		if key == "" || name == "" {
+			t.Skip("set TIX_JIRA_IT_PEOPLE_ISSUE and TIX_JIRA_IT_OTHER_NAME to check redaction with a second person")
+		}
+		d, err := s.svc.Issue(ctx, key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cs, err := s.svc.Comments(ctx, key, 50)
+		if err != nil {
+			t.Fatal(err)
+		}
+		hist, err := s.svc.History(ctx, key, "", 200)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := fmt.Sprintf("%+v %+v %+v", d, cs, hist)
+		if strings.Contains(strings.ToLower(out), strings.ToLower(name)) {
+			t.Errorf("the other person's name appears in the output")
+		}
+		if !strings.Contains(out, "Person A") {
+			t.Errorf("no placeholder found; does the ticket have a comment or mention by the other person?")
 		}
 	})
 }
