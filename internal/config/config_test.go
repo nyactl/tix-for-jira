@@ -45,11 +45,11 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sub", "config.json")
 	t.Setenv("TIX_JIRA_CONFIG", path)
 
-	if _, err := Load(); !errors.Is(err, ErrNotConfigured) {
+	if _, err := Load(""); !errors.Is(err, ErrNotConfigured) {
 		t.Fatalf("Load before save: %v", err)
 	}
 	c := &Config{Site: "team.atlassian.net", Email: "me@example.com", Privacy: PrivacyOwn, TokenExpiry: "2027-01-31"}
-	if err := c.Save(); err != nil {
+	if err := c.Save(""); err != nil {
 		t.Fatal(err)
 	}
 	info, err := os.Stat(path)
@@ -59,7 +59,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	if perm := info.Mode().Perm(); perm != 0o600 {
 		t.Errorf("config permissions = %o, want 600", perm)
 	}
-	got, err := Load()
+	got, err := Load("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func TestLoadDefaultsPrivacyToOwn(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`{"site":"https://team.atlassian.net","email":"me@example.com"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	c, err := Load()
+	c, err := Load("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,5 +127,43 @@ func TestExpiryWarning(t *testing.T) {
 		if (tt.want == "") != (got == "") || !strings.Contains(got, tt.want) {
 			t.Errorf("expiry %q: got %q, want containing %q", tt.expiry, got, tt.want)
 		}
+	}
+}
+
+func TestProfiles(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("TIX_JIRA_CONFIG", "")
+	t.Setenv("TIX_JIRA_PROFILE", "")
+
+	def, _ := Path("")
+	test, _ := Path("test")
+	if filepath.Base(def) != "config.json" || filepath.Base(test) != "test.json" || filepath.Dir(filepath.Dir(test)) != filepath.Dir(def) {
+		t.Errorf("paths: %s %s", def, test)
+	}
+	t.Setenv("TIX_JIRA_PROFILE", "test")
+	if p, _ := Path(""); p != test {
+		t.Errorf("TIX_JIRA_PROFILE ignored: %s", p)
+	}
+	if p, _ := Path("default"); p != def {
+		t.Errorf("explicit profile must win over the environment: %s", p)
+	}
+	for _, bad := range []string{"../x", "Test", "a/b", "-x", strings.Repeat("a", 33)} {
+		if _, err := Path(bad); err == nil {
+			t.Errorf("profile %q accepted", bad)
+		}
+	}
+
+	c := Config{Site: "a.atlassian.net", Email: "me@example.com", Privacy: PrivacyOwn}
+	if err := c.Save("default"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Save("test"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Profiles()
+	if err != nil || strings.Join(got, ",") != "default,test" {
+		t.Errorf("Profiles = %v, %v", got, err)
 	}
 }

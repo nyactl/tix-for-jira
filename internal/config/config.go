@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -32,23 +33,79 @@ type Config struct {
 }
 
 // ErrNotConfigured is returned by Load when no login has happened yet.
-var ErrNotConfigured = errors.New("tix-jira is not set up yet; run `tix-jira auth login`")
+var ErrNotConfigured = errors.New("this profile is not set up yet; run `tix-jira auth login` (add --profile <name> for other profiles)")
 
-// Path returns the config file location, honouring TIX_JIRA_CONFIG for tests.
-func Path() (string, error) {
-	if p := os.Getenv("TIX_JIRA_CONFIG"); p != "" {
-		return p, nil
+// DefaultProfile is used when no profile is selected.
+const DefaultProfile = "default"
+
+var profileRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
+
+// ResolveProfile returns profile, or TIX_JIRA_PROFILE, or DefaultProfile.
+func ResolveProfile(profile string) (string, error) {
+	if profile == "" {
+		profile = os.Getenv("TIX_JIRA_PROFILE")
 	}
-	dir, err := os.UserConfigDir()
+	if profile == "" {
+		return DefaultProfile, nil
+	}
+	if !profileRe.MatchString(profile) {
+		return "", fmt.Errorf("invalid profile name %q: use lowercase letters, digits and dashes", profile)
+	}
+	return profile, nil
+}
+
+func dir() (string, error) {
+	d, err := os.UserConfigDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, "tix-jira", "config.json"), nil
+	return filepath.Join(d, "tix-jira"), nil
 }
 
-// Load reads and validates the config file.
-func Load() (*Config, error) {
-	p, err := Path()
+// Path returns the config file of a profile. TIX_JIRA_CONFIG overrides it.
+func Path(profile string) (string, error) {
+	if p := os.Getenv("TIX_JIRA_CONFIG"); p != "" {
+		return p, nil
+	}
+	profile, err := ResolveProfile(profile)
+	if err != nil {
+		return "", err
+	}
+	d, err := dir()
+	if err != nil {
+		return "", err
+	}
+	if profile == DefaultProfile {
+		return filepath.Join(d, "config.json"), nil
+	}
+	return filepath.Join(d, "profiles", profile+".json"), nil
+}
+
+// Profiles lists the profiles that have a config file.
+func Profiles() ([]string, error) {
+	d, err := dir()
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	if _, err := os.Stat(filepath.Join(d, "config.json")); err == nil {
+		out = append(out, DefaultProfile)
+	}
+	entries, err := os.ReadDir(filepath.Join(d, "profiles"))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	for _, e := range entries {
+		if name, ok := strings.CutSuffix(e.Name(), ".json"); ok && profileRe.MatchString(name) {
+			out = append(out, name)
+		}
+	}
+	return out, nil
+}
+
+// Load reads and validates a profile's config file.
+func Load(profile string) (*Config, error) {
+	p, err := Path(profile)
 	if err != nil {
 		return nil, err
 	}
@@ -72,12 +129,13 @@ func Load() (*Config, error) {
 	return &c, nil
 }
 
-// Save validates and writes the config file with owner-only permissions.
-func (c *Config) Save() error {
+// Save validates and writes a profile's config file with owner-only
+// permissions.
+func (c *Config) Save(profile string) error {
 	if err := c.Validate(); err != nil {
 		return err
 	}
-	p, err := Path()
+	p, err := Path(profile)
 	if err != nil {
 		return err
 	}
