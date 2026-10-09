@@ -13,7 +13,11 @@ These tests run tix-jira against a real Jira Cloud site. They create tickets, co
    ```sh
    tix-jira --profile test auth login     # use the second account and its API token
    ```
-6. Optional, to check that other people are replaced by placeholders: let another account comment on one of the test user's tickets and @mention the test user.
+6. For the two-person tests, log a second account of the same site into its own profile. The suite then acts as that person on its own: it creates a ticket it owns, comments on and hands over a ticket to the tested account, and checks that the tested account sees it only as "Person A":
+
+   ```sh
+   tix-jira --profile test2 auth login    # second account, its own API token
+   ```
 
 ## Running
 
@@ -21,13 +25,11 @@ These tests run tix-jira against a real Jira Cloud site. They create tickets, co
 export TIX_JIRA_PROFILE=test
 export TIX_JIRA_IT_PROJECT=TIX       # project key from step 2
 export TIX_JIRA_IT_OTHER=TIX-1       # ticket from step 4 (not assigned to the test user)
-# optional, step 6:
-export TIX_JIRA_IT_PEOPLE_ISSUE=TIX-7          # the test user's ticket with the other person's comment
-export TIX_JIRA_IT_OTHER_NAME="Their Name"     # the other person's display name; must not appear in any output
+export TIX_JIRA_IT_OTHER_PROFILE=test2         # optional, step 6
 go test -tags integration -count=1 -v ./integration/
 ```
 
-The token is read from the Keychain item created by `tix-jira auth login`. Because the test binary is a different program, macOS asks once whether it may read that item; choose **Allow** (not "Always Allow", as the test binary changes on every build).
+Tokens are read from the Keychain items created by `tix-jira auth login`. Because the test binary is a different program, macOS asks once per item whether it may read it; choose **Allow** (not "Always Allow", as the test binary changes on every build).
 
 Tickets created by the tests carry the label `tix-jira-it` and a timestamp. tix-jira cannot delete tickets, so remove them in Jira when you no longer need them.
 
@@ -37,4 +39,4 @@ Tickets created by the tests carry the label `tix-jira-it` and a timestamp. tix-
 - a ticket assigned to someone else is invisible to reads, searches and writes
 - Markdown descriptions and comments survive the round trip through Jira's rich-text format
 - field updates (including a number field and the due date where available), transitions with comments, subtasks, worklogs with start times, attachment downloads, and links, including that "A blocks B" is stored in the right direction
-- with step 6: another person's name appears nowhere in issue, comment or history output; they show up as "Person A"
+- with step 6: a ticket owned by another person is invisible; on a ticket they handed over, their name, email and account ID appear nowhere in issue, comment, link or history output, they show up as "Person A", and mentioning `@[Person A]` notifies the real person

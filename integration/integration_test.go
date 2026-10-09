@@ -361,31 +361,6 @@ func TestIntegration(t *testing.T) {
 		}
 	})
 
-	t.Run("other people are placeholders", func(t *testing.T) {
-		key, name := os.Getenv("TIX_JIRA_IT_PEOPLE_ISSUE"), os.Getenv("TIX_JIRA_IT_OTHER_NAME")
-		if key == "" || name == "" {
-			t.Skip("set TIX_JIRA_IT_PEOPLE_ISSUE and TIX_JIRA_IT_OTHER_NAME to check redaction with a second person")
-		}
-		d, err := s.svc.Issue(ctx, key)
-		if err != nil {
-			t.Fatal(err)
-		}
-		cs, err := s.svc.Comments(ctx, key, 50)
-		if err != nil {
-			t.Fatal(err)
-		}
-		hist, err := s.svc.History(ctx, key, "", 200)
-		if err != nil {
-			t.Fatal(err)
-		}
-		out := fmt.Sprintf("%+v %+v %+v", d, cs, hist)
-		if strings.Contains(strings.ToLower(out), strings.ToLower(name)) {
-			t.Errorf("the other person's name appears in the output")
-		}
-		if !strings.Contains(out, "Person A") {
-			t.Errorf("no placeholder found; does the ticket have a comment or mention by the other person?")
-		}
-	})
 }
 
 func hasLink(links []core.Related, relation, key string) bool {

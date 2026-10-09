@@ -14,5 +14,6 @@ dev:
 	go build -o "$$(go env GOPATH)/bin/tix-jira-dev" .
 
 # Integration tests against the test site; see integration/README.md.
+# Set TIX_JIRA_IT_PROJECT, TIX_JIRA_IT_OTHER and optionally TIX_JIRA_IT_OTHER_PROFILE.
 it:
 	TIX_JIRA_PROFILE=$${TIX_JIRA_PROFILE:-test} go test -tags integration -count=1 -v ./integration/
