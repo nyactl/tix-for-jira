@@ -28,9 +28,33 @@ type site struct {
 	cfg     *config.Config
 	token   string
 	svc     *core.Service
+	jc      *jira.Client
 	project string
 	other   string
 	run     string
+}
+
+// closeWhenDone moves a ticket to a done status at the end of the test, so
+// test runs do not pile up open tickets. Tickets cannot be deleted with
+// tix-jira; remove them in Jira if needed.
+func closeWhenDone(t *testing.T, jc *jira.Client, key string) {
+	t.Cleanup(func() {
+		ctx := context.Background()
+		ts, err := jc.Transitions(ctx, key)
+		if err != nil {
+			t.Logf("cleanup %s: %v", key, err)
+			return
+		}
+		for _, tr := range ts {
+			if tr.To.StatusCategory.Key == "done" {
+				if err := jc.DoTransition(ctx, key, tr.ID); err != nil {
+					t.Logf("cleanup %s: %v", key, err)
+				}
+				return
+			}
+		}
+		t.Logf("cleanup %s: no transition to a done status", key)
+	})
 }
 
 func setup(t *testing.T) *site {
@@ -53,11 +77,12 @@ func setup(t *testing.T) *site {
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc, err := core.New(context.Background(), jira.New(cfg.Site, cfg.Email, token, "integration"), cfg.Privacy)
+	jc := jira.New(cfg.Site, cfg.Email, token, "integration")
+	svc, err := core.New(context.Background(), jc, cfg.Privacy)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &site{cfg: cfg, token: token, svc: svc, project: project, other: other, run: time.Now().Format("20060102-150405")}
+	return &site{cfg: cfg, token: token, svc: svc, jc: jc, project: project, other: other, run: time.Now().Format("20060102-150405")}
 }
 
 // applied returns a function that applies a plan, failing the test on any
@@ -85,7 +110,9 @@ func (s *site) create(t *testing.T, summary, description string) string {
 	if _, err := fmt.Sscanf(msg, "Created %s", &key); err != nil {
 		t.Fatalf("unexpected create result %q", msg)
 	}
-	return strings.TrimSuffix(key, ":")
+	key = strings.TrimSuffix(key, ":")
+	closeWhenDone(t, s.jc, key)
+	return key
 }
 
 // upload adds an attachment through the REST API; tix-jira itself cannot
@@ -258,6 +285,7 @@ func TestIntegration(t *testing.T) {
 			t.Fatalf("unexpected create result %q", msg)
 		}
 		sub = strings.TrimSuffix(sub, ":")
+		closeWhenDone(t, s.jc, sub)
 		d, err := s.svc.Issue(ctx, sub)
 		if err != nil || d.Parent == nil || d.Parent.Key != a || d.Assignee != "Me" {
 			t.Errorf("subtask = %+v, %v", d, err)

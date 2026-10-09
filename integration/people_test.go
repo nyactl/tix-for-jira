@@ -84,6 +84,7 @@ func (o *otherPerson) createOwned(t *testing.T, project, summary string) string 
 	if err != nil {
 		t.Fatal(err)
 	}
+	closeWhenDone(t, o.jc, key)
 	if err := o.jc.AssignIssue(ctx, key, o.me.AccountID); err != nil {
 		t.Fatal(err)
 	}
