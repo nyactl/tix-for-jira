@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -438,6 +439,9 @@ func (f *Fake) issueRoute(w http.ResponseWriter, r *http.Request, i *Issue, sub 
 		var cs []any
 		for _, c := range i.Comments {
 			cs = append(cs, map[string]any{"id": c.ID, "author": f.userJSON(c.Author), "body": c.Body, "created": c.Created, "updated": c.Created})
+		}
+		if r.URL.Query().Get("orderBy") == "-created" {
+			slices.Reverse(cs)
 		}
 		writeJSON(w, 200, paged(r, "comments", cs))
 	case "/comment POST":

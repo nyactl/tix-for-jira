@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -101,13 +102,13 @@ func startAtPages[T any](ctx context.Context, c *Client, path string, extra url.
 	return all, nil
 }
 
-// Comments returns up to limit comments, oldest first.
+// Comments returns the newest limit comments, in chronological order.
 func (c *Client) Comments(ctx context.Context, key string, limit int) ([]Comment, error) {
 	p, err := issuePath(key, "/comment")
 	if err != nil {
 		return nil, err
 	}
-	return startAtPages(ctx, c, p, url.Values{"orderBy": {"created"}}, limit, func(b []byte) ([]Comment, int, bool, error) {
+	cs, err := startAtPages(ctx, c, p, url.Values{"orderBy": {"-created"}}, limit, func(b []byte) ([]Comment, int, bool, error) {
 		var page struct {
 			Comments []Comment `json:"comments"`
 			Total    int       `json:"total"`
@@ -115,6 +116,8 @@ func (c *Client) Comments(ctx context.Context, key string, limit int) ([]Comment
 		err := json.Unmarshal(b, &page)
 		return page.Comments, page.Total, false, err
 	})
+	slices.Reverse(cs)
+	return cs, err
 }
 
 // AddComment posts an ADF comment.

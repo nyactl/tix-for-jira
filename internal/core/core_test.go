@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -494,5 +496,30 @@ func TestPlanLink(t *testing.T) {
 	}
 	if _, err := s.PlanLink(ctx, "PROJ-1", "loves", "PROJ-3"); err == nil || !strings.Contains(err.Error(), "use one of") {
 		t.Errorf("unknown relation: %v", err)
+	}
+}
+
+func TestCommentsAndWorklogsKeepTheNewest(t *testing.T) {
+	t.Parallel()
+	f := fixture(t)
+	i := f.Issues["PROJ-1"]
+	for n := 3; n <= 8; n++ {
+		i.Comments = append(i.Comments, jiratest.Comment{ID: strconv.Itoa(n), Author: "acc-me", Created: fmt.Sprintf("2026-10-0%dT10:00:00.000+0000", min(n, 9)), Body: jiratest.Doc("c" + strconv.Itoa(n))})
+		i.Worklogs = append(i.Worklogs, jiratest.Worklog{ID: strconv.Itoa(100 + n), Author: "acc-me", Started: "2026-10-05T08:00:00.000+0000", Seconds: n * 60})
+	}
+	s := service(t, f, config.PrivacyOwn)
+	cs, err := s.Comments(context.Background(), "PROJ-1", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cs) != 3 || cs[0].Body != "c6" || cs[2].Body != "c8" {
+		t.Errorf("comments = %+v, want c6..c8 in order", cs)
+	}
+	ws, err := s.Worklogs(context.Background(), "PROJ-1", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ws) != 2 || ws[1].ID != "108" {
+		t.Errorf("worklogs = %+v, want the newest two", ws)
 	}
 }

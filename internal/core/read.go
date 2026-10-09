@@ -439,9 +439,14 @@ func (s *Service) Worklogs(ctx context.Context, key string, max int) ([]WorklogV
 	if max <= 0 {
 		max = 100
 	}
-	ws, err := s.jc.Worklogs(ctx, issue.Key, max)
+	// The endpoint lists oldest first and cannot sort, so fetch generously
+	// and keep the newest.
+	ws, err := s.jc.Worklogs(ctx, issue.Key, 1000)
 	if err != nil {
 		return nil, err
+	}
+	if len(ws) > max {
+		ws = ws[len(ws)-max:]
 	}
 	out := make([]WorklogView, len(ws))
 	for i, w := range ws {
