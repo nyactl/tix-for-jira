@@ -117,11 +117,16 @@ func TestLoginWithTokenFromStdin(t *testing.T) {
 
 func TestLoginRejectsBadTokenAndStoresNothing(t *testing.T) {
 	e := newEnv(t)
-	e.tty.answers = []string{"me@example.com", ""}
+	e.tty.answers = []string{"me@example.com"}
 	e.tty.secrets = []string{"wrong"}
 	_, _, err := e.run(t, "auth", "login", "--site", e.fake.URL())
-	if err == nil || !strings.Contains(err.Error(), "credentials rejected by Jira") {
+	if !errors.Is(err, errLoginRejected) || !strings.Contains(err.Error(), "API token itself (not your password)") {
 		t.Fatalf("err = %v", err)
+	}
+	for _, q := range e.tty.asked {
+		if strings.Contains(q, "expiry") {
+			t.Errorf("asked for the expiry date after a rejected token: %q", e.tty.asked)
+		}
 	}
 	if _, err := config.Load(""); !errors.Is(err, config.ErrNotConfigured) {
 		t.Errorf("config written: %v", err)

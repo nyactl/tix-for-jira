@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/nyactl/tix-for-jira/internal/config"
+	"github.com/nyactl/tix-for-jira/internal/jira"
 	"github.com/nyactl/tix-for-jira/internal/secret"
 )
 
@@ -57,21 +58,22 @@ func (a *App) authCmd() *cobra.Command {
 			if token == "" {
 				return errors.New("no token entered")
 			}
+			email = strings.TrimSpace(email)
+			me, err := a.client(site, email, token).Myself(cmd.Context())
+			if err != nil {
+				return loginError(site, email, err)
+			}
 			if !cmd.Flags().Changed("expires") {
 				if expires, err = a.TTY.Prompt("Token expiry date shown by Atlassian (YYYY-MM-DD, empty to skip): "); err != nil {
 					return err
 				}
 			}
-			cfg := &config.Config{Site: site, Email: strings.TrimSpace(email), Privacy: config.PrivacyOwn, TokenExpiry: strings.TrimSpace(expires)}
+			cfg := &config.Config{Site: site, Email: email, Privacy: config.PrivacyOwn, TokenExpiry: strings.TrimSpace(expires)}
 			if prev != nil {
 				cfg.Privacy = prev.Privacy
 			}
 			if err := cfg.Validate(); err != nil {
 				return err
-			}
-			me, err := a.client(cfg.Site, cfg.Email, token).Myself(cmd.Context())
-			if err != nil {
-				return fmt.Errorf("checking the credentials: %w", err)
 			}
 			if err := a.Secrets.Set(secret.AccountKey(cfg.Site, cfg.Email), token); err != nil {
 				return err
@@ -139,6 +141,23 @@ func (a *App) authCmd() *cobra.Command {
 	}
 	cmd.AddCommand(login, status, logout)
 	return cmd
+}
+
+// errLoginRejected is returned when Jira does not accept the email and token.
+var errLoginRejected = errors.New("this email and API token were not accepted by Jira")
+
+// loginError explains a failed credential check at login. Nothing has been
+// stored at that point.
+func loginError(site, email string, err error) error {
+	switch {
+	case errors.Is(err, jira.ErrUnauthorized):
+		return fmt.Errorf("%w on %s; nothing was saved. Check that you pasted the API token itself (not your password), "+
+			"that it was created for the Atlassian account %s, and that it has not expired or been revoked: "+
+			"https://id.atlassian.com/manage-profile/security/api-tokens", errLoginRejected, site, email)
+	case errors.Is(err, jira.ErrNotFound):
+		return fmt.Errorf("%s does not look like a Jira Cloud site (no REST API found); nothing was saved", site)
+	}
+	return fmt.Errorf("could not check the credentials with %s; nothing was saved: %w", site, err)
 }
 
 func (a *App) configCmd() *cobra.Command {
