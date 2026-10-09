@@ -4,6 +4,15 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ## Unreleased
 
+### Added
+
+- Homebrew formula: `brew install nyactl/tap/tix-for-jira`.
+- Signed release archives for Apple Silicon and Intel Macs.
+
+### Fixed
+
+- `tix auth login` checks the token right after it is entered and says clearly when Jira rejects it; nothing is saved then.
+
 ## [0.1.0] - 2026-10-09
 
 First release, tested against Jira Cloud with a non-admin account.

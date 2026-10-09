@@ -11,13 +11,21 @@
 
 ## Install
 
-Requires macOS and Go 1.26+:
+Requires macOS. With Homebrew:
+
+```sh
+brew install nyactl/tap/tix-for-jira
+```
+
+Or with Go 1.26+:
 
 ```sh
 go install github.com/nyactl/tix-for-jira/cmd/tix@latest
 ```
 
-This installs the `tix` command. Make sure `$(go env GOPATH)/bin` is on your `PATH`.
+Both install the `tix` command. After each upgrade, macOS asks once whether the new binary may read the token from the Keychain.
+
+Release archives are signed with cosign; see [RELEASING.md](RELEASING.md#verifying-release-signatures) to verify them.
 
 ## Set up
 

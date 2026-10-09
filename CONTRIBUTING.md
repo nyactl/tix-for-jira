@@ -37,4 +37,4 @@ Read [docs/design.md](docs/design.md) first. In short:
 
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/), e.g. `fix(core): keep labels stable across searches`; mark breaking changes with `!`.
 - Keep pull requests focused; tests, lint and govulncheck must pass.
-- Add a line to the "Unreleased" section of [CHANGELOG.md](CHANGELOG.md) for user-visible changes.
+- Add a line to the "Unreleased" section of [CHANGELOG.md](CHANGELOG.md) for user-visible changes. Releases are described in [RELEASING.md](RELEASING.md).
