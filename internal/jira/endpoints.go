@@ -298,22 +298,23 @@ func (c *Client) LinkTypes(ctx context.Context) ([]LinkType, error) {
 	return out.IssueLinkTypes, nil
 }
 
-// CreateLink links two issues. In Jira's model the outward issue is the
-// subject of the link type's outward phrase: for type "Blocks", outward A
-// and inward B reads "A blocks B".
-func (c *Client) CreateLink(ctx context.Context, typeName, outwardKey, inwardKey string) error {
-	out, err := NormalizeKey(outwardKey)
+// CreateLink links two issues so that "<subjectKey> <outward phrase>
+// <objectKey>" holds, e.g. "A blocks B". Counter-intuitively, the create
+// endpoint takes the subject as inwardIssue; this was verified against Jira
+// Cloud on 2026-10-09 (integration test "link direction").
+func (c *Client) CreateLink(ctx context.Context, typeName, subjectKey, objectKey string) error {
+	subject, err := NormalizeKey(subjectKey)
 	if err != nil {
 		return err
 	}
-	in, err := NormalizeKey(inwardKey)
+	object, err := NormalizeKey(objectKey)
 	if err != nil {
 		return err
 	}
 	body := map[string]any{
 		"type":         map[string]string{"name": typeName},
-		"outwardIssue": map[string]string{"key": out},
-		"inwardIssue":  map[string]string{"key": in},
+		"inwardIssue":  map[string]string{"key": subject},
+		"outwardIssue": map[string]string{"key": object},
 	}
 	return c.do(ctx, http.MethodPost, "/rest/api/3/issueLink", nil, body, nil)
 }

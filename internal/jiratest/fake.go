@@ -635,9 +635,11 @@ func (f *Fake) createIssue(w http.ResponseWriter, body map[string]any, me *User)
 }
 
 func (f *Fake) createLink(w http.ResponseWriter, body map[string]any) {
+	// Like Jira Cloud, the create endpoint takes the subject of the outward
+	// phrase as inwardIssue: {inward: A, outward: B, type: Blocks} is "A blocks B".
 	typ, _ := body["type"].(map[string]any)["name"].(string)
-	out, _ := body["outwardIssue"].(map[string]any)["key"].(string)
-	in, _ := body["inwardIssue"].(map[string]any)["key"].(string)
+	out, _ := body["inwardIssue"].(map[string]any)["key"].(string)
+	in, _ := body["outwardIssue"].(map[string]any)["key"].(string)
 	if f.Issues[out] == nil || f.Issues[in] == nil {
 		errJSON(w, 404, "issue not found")
 		return

@@ -507,10 +507,10 @@ func (s *Service) PlanLink(ctx context.Context, key, relation, other string) (*P
 		return nil, fmt.Errorf("unknown relation %q; use one of: %s", relation, strings.Join(phrases, ", "))
 	}
 	phrase := lt.Outward
-	outKey, inKey := from.Key, to.Key
+	subject, object := from.Key, to.Key
 	if !outward {
 		phrase = lt.Inward
-		outKey, inKey = to.Key, from.Key
+		subject, object = to.Key, from.Key
 	}
 	for _, l := range from.Fields.IssueLinks {
 		if l.Type.Name == lt.Name && ((l.OutwardIssue != nil && l.OutwardIssue.Key == to.Key) || (l.InwardIssue != nil && l.InwardIssue.Key == to.Key)) {
@@ -522,7 +522,7 @@ func (s *Service) PlanLink(ctx context.Context, key, relation, other string) (*P
 		Key:         from.Key,
 		Description: fmt.Sprintf("Link %s %s %s.", s.people.Text(headline(from)), phrase, s.people.Text(headline(to))),
 		apply: func(ctx context.Context) (string, error) {
-			if err := s.jc.CreateLink(ctx, lt.Name, outKey, inKey); err != nil {
+			if err := s.jc.CreateLink(ctx, lt.Name, subject, object); err != nil {
 				return "", err
 			}
 			return s.verifyLink(ctx, from.Key, to.Key, lt.Name, outward, phrase)

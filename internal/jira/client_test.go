@@ -272,7 +272,7 @@ func TestWriteBodies(t *testing.T) {
 	if _, ok := got[0]["update"].(map[string]any)["comment"]; !ok {
 		t.Errorf("transition comment missing: %v", got[0])
 	}
-	if got[1]["outwardIssue"].(map[string]any)["key"] != "A-1" || got[1]["inwardIssue"].(map[string]any)["key"] != "A-2" {
+	if got[1]["inwardIssue"].(map[string]any)["key"] != "A-1" || got[1]["outwardIssue"].(map[string]any)["key"] != "A-2" {
 		t.Errorf("link body = %v", got[1])
 	}
 	if got[2]["started"] != "2026-10-08T09:30:00.000+0200" || got[2]["timeSpentSeconds"] != float64(5400) {
