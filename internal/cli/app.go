@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime/debug"
 	"time"
 
@@ -100,11 +101,23 @@ func (a *App) print(cmd *cobra.Command, v any, markdown func() string) error {
 
 var errDevNeedsProfile = errors.New("this is a development build: choose a profile explicitly with --profile or TIX_JIRA_PROFILE, so it cannot touch your production site by accident")
 
+var (
+	releaseRe = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$`)
+	pseudoRe  = regexp.MustCompile(`[0-9]{14}-[0-9a-f]{12}`)
+)
+
+// isRelease reports whether v is a tagged release, as installed with
+// `go install ...@v1.2.3`. Builds from a checkout carry "dev", a
+// pseudo-version such as v0.0.0-20261009122403-4c701510dbd1, or "+dirty".
+func isRelease(v string) bool {
+	return releaseRe.MatchString(v) && !pseudoRe.MatchString(v)
+}
+
 // profile returns the selected profile name. Development builds must name
 // one explicitly.
 func (a *App) profile(cmd *cobra.Command) (string, error) {
 	p, _ := cmd.Flags().GetString("profile")
-	if a.Version == "dev" && p == "" && os.Getenv("TIX_JIRA_PROFILE") == "" && os.Getenv("TIX_JIRA_CONFIG") == "" {
+	if !isRelease(a.Version) && p == "" && os.Getenv("TIX_JIRA_PROFILE") == "" && os.Getenv("TIX_JIRA_CONFIG") == "" {
 		return "", errDevNeedsProfile
 	}
 	return config.ResolveProfile(p)

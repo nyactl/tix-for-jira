@@ -293,7 +293,7 @@ func TestProfilesAreIsolated(t *testing.T) {
 	if _, _, err := e.runStdin(t, "tok-me\n", "auth", "login", "--profile", "test", "--site", e.fake.URL(), "--email", "me@example.com", "--expires", "", "--with-token"); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := e.run(t, "mine"); !errors.Is(err, config.ErrNotConfigured) {
+	if _, _, err := e.run(t, "mine", "--profile", "default"); !errors.Is(err, config.ErrNotConfigured) {
 		t.Errorf("default profile must stay unconfigured: %v", err)
 	}
 	if out, _, err := e.run(t, "mine", "--profile", "test"); err != nil || !strings.Contains(out, "PROJ-1") {
@@ -314,8 +314,15 @@ func TestDevBuildNeedsExplicitProfile(t *testing.T) {
 	t.Setenv("TIX_JIRA_CONFIG", "")
 	t.Setenv("TIX_JIRA_PROFILE", "")
 	var out bytes.Buffer
-	app := &App{Version: "dev", In: strings.NewReader(""), Out: &out, Err: &out, TTY: e.tty, Secrets: e.secrets, Transport: e.fake.Transport(), Now: time.Now}
-	if err := app.Execute(context.Background(), []string{"mine"}); !errors.Is(err, errDevNeedsProfile) {
-		t.Errorf("err = %v", err)
+	for _, v := range []string{"dev", "v0.0.0-20261009122403-4c701510dbd1", "v0.1.0+dirty", "v0.1.1-0.20261009122403-4c701510dbd1"} {
+		app := &App{Version: v, In: strings.NewReader(""), Out: &out, Err: &out, TTY: e.tty, Secrets: e.secrets, Transport: e.fake.Transport(), Now: time.Now}
+		if err := app.Execute(context.Background(), []string{"mine"}); !errors.Is(err, errDevNeedsProfile) {
+			t.Errorf("version %s: err = %v", v, err)
+		}
+	}
+	for _, v := range []string{"v0.1.0", "v1.2.3-rc.1"} {
+		if !isRelease(v) {
+			t.Errorf("%s should count as a release", v)
+		}
 	}
 }
