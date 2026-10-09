@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -39,8 +41,14 @@ func (a *App) authCmd() *cobra.Command {
 					return err
 				}
 			}
-			token, err := a.TTY.Secret("API token (input hidden): ")
-			if err != nil {
+			var token string
+			if withToken, _ := cmd.Flags().GetBool("with-token"); withToken {
+				line, err := bufio.NewReader(io.LimitReader(a.In, 4096)).ReadString('\n')
+				if err != nil && !errors.Is(err, io.EOF) {
+					return err
+				}
+				token = strings.TrimSpace(line)
+			} else if token, err = a.TTY.Secret("API token (input hidden): "); err != nil {
 				return err
 			}
 			if token == "" {
@@ -78,6 +86,7 @@ func (a *App) authCmd() *cobra.Command {
 	login.Flags().String("site", "", "Jira site, e.g. your-team.atlassian.net")
 	login.Flags().String("email", "", "your Atlassian account email")
 	login.Flags().String("expires", "", "token expiry date (YYYY-MM-DD), to be warned in time")
+	login.Flags().Bool("with-token", false, "read the API token from stdin instead of prompting, e.g. from a password manager")
 
 	status := &cobra.Command{
 		Use:   "status",

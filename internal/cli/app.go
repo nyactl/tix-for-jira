@@ -25,6 +25,7 @@ import (
 // App holds the command dependencies, replaceable in tests.
 type App struct {
 	Version  string
+	In       io.Reader
 	Out, Err io.Writer
 	TTY      Terminal
 	Secrets  secret.Store
@@ -35,7 +36,7 @@ type App struct {
 
 // Default returns the production dependencies.
 func Default(version string) *App {
-	return &App{Version: resolveVersion(version), Out: os.Stdout, Err: os.Stderr, TTY: devTTY{}, Secrets: secret.NewKeychain(), Now: time.Now}
+	return &App{Version: resolveVersion(version), In: os.Stdin, Out: os.Stdout, Err: os.Stderr, TTY: devTTY{}, Secrets: secret.NewKeychain(), Now: time.Now}
 }
 
 func resolveVersion(v string) string {

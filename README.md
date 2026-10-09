@@ -30,7 +30,7 @@ Make sure `$(go env GOPATH)/bin` is on your `PATH`.
    tix-jira auth login
    ```
 
-   tix-jira asks for your site (e.g. `your-team.atlassian.net`), email, token (hidden) and the token's expiry date, verifies them and stores the token in the Keychain. It warns you two weeks before the token expires.
+   tix-jira asks for your site (e.g. `your-team.atlassian.net`), email, token (hidden) and the token's expiry date, verifies them and stores the token in the Keychain. It warns you two weeks before the token expires. To pass the token from a password manager instead, pipe it in with `--with-token` (together with `--site`, `--email` and `--expires`).
 
 3. Check: `tix-jira auth status`
 

@@ -70,8 +70,13 @@ func (e *env) loggedIn(t *testing.T) *env {
 
 func (e *env) run(t *testing.T, args ...string) (string, string, error) {
 	t.Helper()
+	return e.runStdin(t, "", args...)
+}
+
+func (e *env) runStdin(t *testing.T, stdin string, args ...string) (string, string, error) {
+	t.Helper()
 	var out, errOut bytes.Buffer
-	app := &App{Version: "test", Out: &out, Err: &errOut, TTY: e.tty, Secrets: e.secrets, Transport: e.fake.Transport(),
+	app := &App{Version: "test", In: strings.NewReader(stdin), Out: &out, Err: &errOut, TTY: e.tty, Secrets: e.secrets, Transport: e.fake.Transport(),
 		Now: func() time.Time { return time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC) }}
 	err := app.Execute(context.Background(), args)
 	return out.String(), errOut.String(), err
@@ -92,6 +97,19 @@ func TestLogin(t *testing.T) {
 	if err != nil || cfg.TokenExpiry != "2027-01-31" || cfg.Privacy != config.PrivacyOwn {
 		t.Fatalf("config = %+v, %v", cfg, err)
 	}
+	if tok, _ := e.secrets.Get(secret.AccountKey(cfg.Site, cfg.Email)); tok != "tok-me" {
+		t.Errorf("stored token = %q", tok)
+	}
+}
+
+func TestLoginWithTokenFromStdin(t *testing.T) {
+	e := newEnv(t)
+	e.tty.noTTY = true
+	_, _, err := e.runStdin(t, "tok-me\n", "auth", "login", "--site", e.fake.URL(), "--email", "me@example.com", "--expires", "2027-01-31", "--with-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, _ := config.Load()
 	if tok, _ := e.secrets.Get(secret.AccountKey(cfg.Site, cfg.Email)); tok != "tok-me" {
 		t.Errorf("stored token = %q", tok)
 	}

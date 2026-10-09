@@ -9,5 +9,5 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 - MCP server with read tools and approval-gated write tools (comment, field update, transition, create, work log, link).
 - CLI with the same operations; writes are confirmed in the terminal.
 - Privacy mode `own`: only your tickets, other people as stable placeholders.
-- API token storage in the macOS Keychain with expiry warnings.
+- API token storage in the macOS Keychain with expiry warnings; `auth login --with-token` reads the token from stdin.
 - Markdown <-> Atlassian Document Format conversion with `@[label]` mentions.
