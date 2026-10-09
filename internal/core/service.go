@@ -103,7 +103,7 @@ func (s *Service) learn(issue *jira.Issue) {
 // markdown renders ADF with people replaced, then redacts known names in
 // the remaining text.
 func (s *Service) markdown(raw json.RawMessage) string {
-	md, err := adf.ToMarkdown(raw, func(id, fallback string) string { return s.people.ID(id, fallback, "") })
+	md, err := adf.ToMarkdown(raw, s.people.Mention)
 	if err != nil {
 		return "(content could not be converted)"
 	}

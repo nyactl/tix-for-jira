@@ -21,26 +21,28 @@ const MeLabel = "Me"
 // People assigns labels to Jira users and resolves them back for mentions.
 // It is safe for concurrent use; labels are stable for its lifetime.
 type People struct {
-	mu      sync.Mutex
-	mode    config.PrivacyMode
-	me      string
-	label   map[string]string // accountID -> label
-	account map[string]string // label (lower case) -> accountID
-	display map[string]string // accountID -> real display name
-	email   map[string]string // accountID -> email, when Jira exposed one
-	next    int
+	mu       sync.Mutex
+	mode     config.PrivacyMode
+	me       string
+	label    map[string]string   // accountID -> label
+	account  map[string]string   // label (lower case) -> accountID
+	display  map[string]string   // accountID -> best known display name
+	reliable map[string]bool     // display came from a structured field
+	names    map[string][]string // accountID -> every name and email seen, for redaction
+	next     int
 }
 
 func NewPeople(mode config.PrivacyMode, me *jira.User) *People {
 	p := &People{
-		mode:    mode,
-		me:      me.AccountID,
-		label:   make(map[string]string),
-		account: make(map[string]string),
-		display: make(map[string]string),
-		email:   make(map[string]string),
+		mode:     mode,
+		me:       me.AccountID,
+		label:    make(map[string]string),
+		account:  make(map[string]string),
+		display:  make(map[string]string),
+		reliable: make(map[string]bool),
+		names:    make(map[string][]string),
 	}
-	p.remember(me.AccountID, me.DisplayName, me.EmailAddress)
+	p.remember(me.AccountID, me.DisplayName, me.EmailAddress, true)
 	return p
 }
 
@@ -58,33 +60,41 @@ func (p *People) User(u *jira.User) string {
 	return p.ID(u.AccountID, u.DisplayName, u.EmailAddress)
 }
 
-// ID returns the label for an account ID. display and email are what Jira
-// returned alongside it and may be empty.
+// ID returns the label for an account ID. display and email come from a
+// structured field and may be empty.
 func (p *People) ID(accountID, display, email string) string {
+	return p.remember(accountID, display, email, true)
+}
+
+// Mention returns the label for a name that may be outdated, such as the
+// text stored with a mention or a name in the change history. It never
+// replaces a name learned from a current field, but is still redacted in
+// free text.
+func (p *People) Mention(accountID, text string) string {
+	return p.remember(accountID, text, "", false)
+}
+
+func (p *People) remember(accountID, display, email string, reliable bool) string {
+	display = strings.TrimSpace(strings.TrimPrefix(display, "@"))
 	if accountID == "" {
 		if p.mode == config.PrivacyOwn {
 			return "someone"
 		}
 		return display
 	}
-	return p.remember(accountID, display, email)
-}
-
-func (p *People) remember(accountID, display, email string) string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	// The first non-empty name wins: mention nodes carry a free-form text
-	// that must not replace the real name learned from structured data.
-	display = strings.TrimPrefix(display, "@")
-	if display != "" && p.display[accountID] == "" {
-		p.display[accountID] = display
+	if display != "" {
+		p.addName(accountID, display)
+		if p.display[accountID] == "" || (reliable && !p.reliable[accountID]) {
+			p.display[accountID] = display
+		}
+		p.reliable[accountID] = p.reliable[accountID] || reliable
 	}
-	if email != "" && p.email[accountID] == "" {
-		p.email[accountID] = email
+	if email != "" {
+		p.addName(accountID, email)
 	}
-	if l, ok := p.label[accountID]; ok && (p.mode == config.PrivacyOwn || accountID == p.me || l == p.display[accountID]) {
-		return l
-	}
+
 	var l string
 	switch {
 	case p.mode == config.PrivacyOff:
@@ -95,12 +105,24 @@ func (p *People) remember(accountID, display, email string) string {
 	case accountID == p.me:
 		l = MeLabel
 	default:
+		if existing, ok := p.label[accountID]; ok {
+			return existing
+		}
 		p.next++
 		l = "Person " + letters(p.next)
 	}
 	p.label[accountID] = l
 	p.account[strings.ToLower(l)] = accountID
 	return l
+}
+
+func (p *People) addName(accountID, name string) {
+	for _, n := range p.names[accountID] {
+		if strings.EqualFold(n, name) {
+			return
+		}
+	}
+	p.names[accountID] = append(p.names[accountID], name)
 }
 
 // letters returns A..Z, AA..AZ, BA.. for 1, 2, ...
@@ -130,9 +152,9 @@ func (p *People) Resolve(label string) (accountID, display string, ok bool) {
 	return id, d, true
 }
 
-// Text replaces the full display names and emails of people seen so far
-// with their labels. Names that never appeared in structured data cannot
-// be recognised, so this is best-effort. In off mode text is unchanged.
+// Text replaces every name and email seen so far for other people with
+// their labels. Names that were never seen cannot be recognised, so this
+// is best-effort. In off mode text is unchanged.
 func (p *People) Text(s string) string {
 	if p.mode != config.PrivacyOwn || s == "" {
 		return s
@@ -144,11 +166,10 @@ func (p *People) Text(s string) string {
 		if id == p.me {
 			continue
 		}
-		if d := p.display[id]; len([]rune(d)) >= 3 {
-			rs = append(rs, repl{d, l})
-		}
-		if e := p.email[id]; e != "" {
-			rs = append(rs, repl{e, l})
+		for _, n := range p.names[id] {
+			if len([]rune(n)) >= 3 {
+				rs = append(rs, repl{n, l})
+			}
 		}
 	}
 	p.mu.Unlock()

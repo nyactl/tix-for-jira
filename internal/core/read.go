@@ -396,11 +396,13 @@ func (s *Service) change(it jira.ChangeItem, defs map[string]jira.Field) FieldCh
 			c.From, c.To = it.FromString, it.ToString
 		}
 	case isPerson:
+		// Names in history are from the time of the change, so they are
+		// treated like mention text: redacted, but never the display name.
 		if it.From != "" {
-			c.From = s.people.ID(it.From, it.FromString, "")
+			c.From = s.people.Mention(it.From, it.FromString)
 		}
 		if it.To != "" {
-			c.To = s.people.ID(it.To, it.ToString, "")
+			c.To = s.people.Mention(it.To, it.ToString)
 		}
 	default:
 		c.From, c.To = clip(s.people.Text(it.FromString)), clip(s.people.Text(it.ToString))

@@ -141,3 +141,33 @@ func TestScopeJQL(t *testing.T) {
 		t.Errorf("off mode changed JQL: %q", got)
 	}
 }
+
+func TestMentionTextNeverReplacesRealName(t *testing.T) {
+	t.Parallel()
+	p := NewPeople(config.PrivacyOwn, me)
+	if got := p.Mention("acc-alice", "@Ali (old name)"); got != "Person A" {
+		t.Fatalf("mention label = %q", got)
+	}
+	p.User(alice)
+	got := p.Text("Alice Smith and Ali (old name) and alice@example.com")
+	if got != "Person A and Person A and Person A" {
+		t.Errorf("Text = %q", got)
+	}
+	if _, display, _ := p.Resolve("Person A"); display != "Alice Smith" {
+		t.Errorf("display = %q, want the reliable name", display)
+	}
+}
+
+func TestOffModeLabelUpgradesToReliableName(t *testing.T) {
+	t.Parallel()
+	p := NewPeople(config.PrivacyOff, me)
+	if got := p.Mention("acc-alice", "@Ali"); got != "Ali" {
+		t.Fatalf("label from mention = %q", got)
+	}
+	if got := p.User(alice); got != "Alice Smith" {
+		t.Errorf("label after structured name = %q", got)
+	}
+	if got := p.Mention("acc-alice", "@Ali"); got != "Alice Smith" {
+		t.Errorf("stale mention text took over again: %q", got)
+	}
+}
