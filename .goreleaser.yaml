@@ -54,6 +54,5 @@ brews:
     test: |
       system "#{bin}/tix", "--version"
 
-# Release notes come from CHANGELOG.md, see RELEASING.md.
-changelog:
-  disable: true
+# Release notes come from CHANGELOG.md via --release-notes (see the release
+# workflow); with a notes file, GoReleaser does not generate a changelog.
