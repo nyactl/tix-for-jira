@@ -6,7 +6,7 @@ import "errors"
 
 type unsupported struct{}
 
-// NewKeychain returns a store that always fails: tix-jira keeps its token
+// NewKeychain returns a store that always fails: tix-for-jira keeps its token
 // in the macOS Keychain and supports no other secret storage.
 func NewKeychain() Store { return unsupported{} }
 

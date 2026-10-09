@@ -11,8 +11,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/nyactl/tix-jira/internal/config"
-	"github.com/nyactl/tix-jira/internal/jira"
+	"github.com/nyactl/tix-for-jira/internal/config"
+	"github.com/nyactl/tix-for-jira/internal/jira"
 )
 
 // MeLabel is how the authenticated user appears in own mode.

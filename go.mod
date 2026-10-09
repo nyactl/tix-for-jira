@@ -1,4 +1,4 @@
-module github.com/nyactl/tix-jira
+module github.com/nyactl/tix-for-jira
 
 go 1.26.0
 

@@ -33,7 +33,7 @@ type Config struct {
 }
 
 // ErrNotConfigured is returned by Load when no login has happened yet.
-var ErrNotConfigured = errors.New("this profile is not set up yet; run `tix-jira auth login` (add --profile <name> for other profiles)")
+var ErrNotConfigured = errors.New("this profile is not set up yet; run `tix auth login` (add --profile <name> for other profiles)")
 
 // DefaultProfile is used when no profile is selected.
 const DefaultProfile = "default"
@@ -59,7 +59,7 @@ func dir() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(d, "tix-jira"), nil
+	return filepath.Join(d, "tix-for-jira"), nil
 }
 
 // Path returns the config file of a profile. TIX_JIRA_CONFIG overrides it.
@@ -218,9 +218,9 @@ func (c *Config) ExpiryWarning(now time.Time) string {
 	days := int(exp.Sub(now.Truncate(24*time.Hour)).Hours() / 24)
 	switch {
 	case days < 0:
-		return fmt.Sprintf("your Jira API token expired on %s; create a new one and run `tix-jira auth login`", c.TokenExpiry)
+		return fmt.Sprintf("your Jira API token expired on %s; create a new one and run `tix auth login`", c.TokenExpiry)
 	case days <= 14:
-		return fmt.Sprintf("your Jira API token expires on %s (in %d days); create a new one and run `tix-jira auth login`", c.TokenExpiry, days)
+		return fmt.Sprintf("your Jira API token expires on %s (in %d days); create a new one and run `tix auth login`", c.TokenExpiry, days)
 	}
 	return ""
 }

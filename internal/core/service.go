@@ -1,4 +1,4 @@
-// Package core implements every tix-jira operation on top of the Jira
+// Package core implements every tix-for-jira operation on top of the Jira
 // client. It is the only package that sees raw Jira data: it enforces the
 // privacy scope, replaces people with labels, converts rich text to
 // Markdown and returns plain views. Writes are returned as plans that the
@@ -14,10 +14,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nyactl/tix-jira/internal/adf"
-	"github.com/nyactl/tix-jira/internal/config"
-	"github.com/nyactl/tix-jira/internal/jira"
-	"github.com/nyactl/tix-jira/internal/privacy"
+	"github.com/nyactl/tix-for-jira/internal/adf"
+	"github.com/nyactl/tix-for-jira/internal/config"
+	"github.com/nyactl/tix-for-jira/internal/jira"
+	"github.com/nyactl/tix-for-jira/internal/privacy"
 )
 
 // ErrNotFound is returned for missing tickets and for tickets outside the

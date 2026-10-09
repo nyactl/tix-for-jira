@@ -10,11 +10,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nyactl/tix-jira/internal/adf"
-	"github.com/nyactl/tix-jira/internal/config"
-	"github.com/nyactl/tix-jira/internal/core"
-	"github.com/nyactl/tix-jira/internal/jira"
-	"github.com/nyactl/tix-jira/internal/secret"
+	"github.com/nyactl/tix-for-jira/internal/adf"
+	"github.com/nyactl/tix-for-jira/internal/config"
+	"github.com/nyactl/tix-for-jira/internal/core"
+	"github.com/nyactl/tix-for-jira/internal/jira"
+	"github.com/nyactl/tix-for-jira/internal/secret"
 )
 
 // otherPerson is a second account on the test site, driven directly
@@ -23,7 +23,7 @@ import (
 type otherPerson struct {
 	jc    *jira.Client
 	me    *jira.User
-	names []string // everything that must never appear in tix-jira output
+	names []string // everything that must never appear in tix-for-jira output
 }
 
 func setupOther(t *testing.T, s *site) *otherPerson {
@@ -79,7 +79,7 @@ func (o *otherPerson) createOwned(t *testing.T, project, summary string) string 
 		"project":   map[string]string{"key": project},
 		"issuetype": map[string]string{"id": taskID},
 		"summary":   summary,
-		"labels":    []string{"tix-jira-it"},
+		"labels":    []string{"tix-for-jira-it"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -111,10 +111,10 @@ func TestTwoPeople(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	theirs := other.createOwned(t, s.project, "tix-jira people: owned by the other person "+s.run)
+	theirs := other.createOwned(t, s.project, "tix-for-jira people: owned by the other person "+s.run)
 	// A ticket the other person creates and then hands over to the tested
 	// account, so its reporter and history name the other person.
-	handed := other.createOwned(t, s.project, "tix-jira people: handed over "+s.run)
+	handed := other.createOwned(t, s.project, "tix-for-jira people: handed over "+s.run)
 	if err := other.jc.AssignIssue(ctx, handed, me.AccountID); err != nil {
 		t.Fatal(err)
 	}

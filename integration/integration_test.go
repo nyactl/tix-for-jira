@@ -1,6 +1,6 @@
 //go:build integration
 
-// Package integration runs tix-jira against a real Jira Cloud test site.
+// Package integration runs tix-for-jira against a real Jira Cloud test site.
 // See README.md in this directory for the setup.
 package integration
 
@@ -18,10 +18,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nyactl/tix-jira/internal/config"
-	"github.com/nyactl/tix-jira/internal/core"
-	"github.com/nyactl/tix-jira/internal/jira"
-	"github.com/nyactl/tix-jira/internal/secret"
+	"github.com/nyactl/tix-for-jira/internal/config"
+	"github.com/nyactl/tix-for-jira/internal/core"
+	"github.com/nyactl/tix-for-jira/internal/jira"
+	"github.com/nyactl/tix-for-jira/internal/secret"
 )
 
 type site struct {
@@ -36,7 +36,7 @@ type site struct {
 
 // closeWhenDone moves a ticket to a done status at the end of the test, so
 // test runs do not pile up open tickets. Tickets cannot be deleted with
-// tix-jira; remove them in Jira if needed.
+// tix-for-jira; remove them in Jira if needed.
 func closeWhenDone(t *testing.T, jc *jira.Client, key string) {
 	t.Cleanup(func() {
 		ctx := context.Background()
@@ -104,7 +104,7 @@ func applied(t *testing.T) func(*core.Plan, error) string {
 func (s *site) create(t *testing.T, summary, description string) string {
 	t.Helper()
 	msg := applied(t)(s.svc.PlanCreate(context.Background(), core.CreateInput{
-		Project: s.project, Type: "Task", Summary: summary + " " + s.run, Description: description, Labels: []string{"tix-jira-it"},
+		Project: s.project, Type: "Task", Summary: summary + " " + s.run, Description: description, Labels: []string{"tix-for-jira-it"},
 	}))
 	var key string
 	if _, err := fmt.Sscanf(msg, "Created %s", &key); err != nil {
@@ -115,7 +115,7 @@ func (s *site) create(t *testing.T, summary, description string) string {
 	return key
 }
 
-// upload adds an attachment through the REST API; tix-jira itself cannot
+// upload adds an attachment through the REST API; tix-for-jira itself cannot
 // upload, so this is test-only.
 func (s *site) upload(t *testing.T, key, name string, data []byte) {
 	t.Helper()
@@ -167,8 +167,8 @@ func TestIntegration(t *testing.T) {
 	})
 
 	desc := "## Steps\n\n- open the page\n- click **Save**\n\n```sh\nmake test\n```\n\nSee [docs](https://example.com)."
-	a := s.create(t, "tix-jira integration A", desc)
-	b := s.create(t, "tix-jira integration B", "")
+	a := s.create(t, "tix-for-jira integration A", desc)
+	b := s.create(t, "tix-for-jira integration B", "")
 
 	t.Run("created ticket round-trips Markdown and is assigned to me", func(t *testing.T) {
 		d, err := s.svc.Issue(ctx, a)
@@ -204,8 +204,8 @@ func TestIntegration(t *testing.T) {
 
 	t.Run("update fields", func(t *testing.T) {
 		applied(t)(s.svc.PlanUpdate(ctx, a, []core.FieldInput{
-			{Field: "Summary", Value: "tix-jira integration A updated " + s.run},
-			{Field: "Labels", Value: "tix-jira-it,updated"},
+			{Field: "Summary", Value: "tix-for-jira integration A updated " + s.run},
+			{Field: "Labels", Value: "tix-for-jira-it,updated"},
 		}))
 		d, err := s.svc.Issue(ctx, a)
 		if err != nil || !strings.Contains(d.Summary, "updated") || len(d.Labels) != 2 {
@@ -266,7 +266,7 @@ func TestIntegration(t *testing.T) {
 	})
 
 	t.Run("attachment download", func(t *testing.T) {
-		data := []byte("tix-jira attachment " + s.run)
+		data := []byte("tix attachment " + s.run)
 		s.upload(t, b, "it.txt", data)
 		d, err := s.svc.Issue(ctx, b)
 		if err != nil || len(d.Attachments) == 0 {
@@ -279,7 +279,7 @@ func TestIntegration(t *testing.T) {
 	})
 
 	t.Run("subtask", func(t *testing.T) {
-		msg := applied(t)(s.svc.PlanCreate(ctx, core.CreateInput{Project: s.project, Type: "Subtask", Summary: "tix-jira integration subtask " + s.run, Parent: a, Labels: []string{"tix-jira-it"}}))
+		msg := applied(t)(s.svc.PlanCreate(ctx, core.CreateInput{Project: s.project, Type: "Subtask", Summary: "tix-for-jira integration subtask " + s.run, Parent: a, Labels: []string{"tix-for-jira-it"}}))
 		var sub string
 		if _, err := fmt.Sscanf(msg, "Created %s", &sub); err != nil {
 			t.Fatalf("unexpected create result %q", msg)

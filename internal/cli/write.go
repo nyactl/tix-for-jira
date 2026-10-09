@@ -8,9 +8,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/nyactl/tix-jira/internal/core"
-	"github.com/nyactl/tix-jira/internal/render"
-	"github.com/nyactl/tix-jira/internal/sanitize"
+	"github.com/nyactl/tix-for-jira/internal/core"
+	"github.com/nyactl/tix-for-jira/internal/render"
+	"github.com/nyactl/tix-for-jira/internal/sanitize"
 )
 
 // apply asks for confirmation on the terminal and applies the plan.
@@ -80,8 +80,8 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 	update := &cobra.Command{
 		Use:   "update <key>",
 		Short: "Change fields; you confirm by typing the ticket key",
-		Example: `  tix-jira update PROJ-1 --set "Summary=New title" --set "Labels=auth,urgent"
-  tix-jira update PROJ-1 --set "Description=$(cat notes.md)"`,
+		Example: `  tix update PROJ-1 --set "Summary=New title" --set "Labels=auth,urgent"
+  tix update PROJ-1 --set "Description=$(cat notes.md)"`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			sets, _ := cmd.Flags().GetStringArray("set")
@@ -97,7 +97,7 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 			return a.apply(cmd, svc, p, err)
 		},
 	}
-	update.Flags().StringArray("set", nil, `"Field name=value" (repeatable); see "tix-jira fields <key>"`)
+	update.Flags().StringArray("set", nil, `"Field name=value" (repeatable); see "tix fields <key>"`)
 	_ = update.MarkFlagRequired("set")
 
 	transition := &cobra.Command{
@@ -168,7 +168,7 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 
 	logWork := &cobra.Command{
 		Use:   "log <key> <duration>",
-		Short: "Log time, e.g. tix-jira log PROJ-1 1h30m --started 09:00",
+		Short: "Log time, e.g. tix log PROJ-1 1h30m --started 09:00",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			started, _ := cmd.Flags().GetString("started")
@@ -189,7 +189,7 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 
 	link := &cobra.Command{
 		Use:   "link <key> <relation> <other-key>",
-		Short: `Link tickets, e.g. tix-jira link PROJ-1 "is blocked by" PROJ-2`,
+		Short: `Link tickets, e.g. tix link PROJ-1 "is blocked by" PROJ-2`,
 		Args:  cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			svc, _, err := a.service(cmd)

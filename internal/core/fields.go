@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nyactl/tix-jira/internal/jira"
+	"github.com/nyactl/tix-for-jira/internal/jira"
 )
 
 type kind int
@@ -32,7 +32,7 @@ func (k kind) String() string {
 }
 
 // fieldKind decides how a field is written. People fields are deliberately
-// unsupported: changing who a ticket belongs to is outside tix-jira's scope.
+// unsupported: changing who a ticket belongs to is outside tix-for-jira's scope.
 func fieldKind(id string, m jira.FieldMeta) kind {
 	sch := m.Schema
 	if !contains(m.Operations, "set") {
@@ -195,7 +195,7 @@ func (s *Service) convert(k kind, m jira.FieldMeta, input string) (any, error) {
 		}
 		return out, nil
 	}
-	return nil, fmt.Errorf("%s cannot be changed with tix-jira", m.Name)
+	return nil, fmt.Errorf("%s cannot be changed with tix-for-jira", m.Name)
 }
 
 // findField matches a field by ID or case-insensitive name.

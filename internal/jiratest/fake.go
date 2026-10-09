@@ -1,7 +1,7 @@
 // Package jiratest provides an in-memory fake of the Jira Cloud REST v3
-// endpoints tix-jira uses. It models several users, so scope and redaction
+// endpoints tix-for-jira uses. It models several users, so scope and redaction
 // can be tested with other people's tickets. The JQL support is limited to
-// what tix-jira generates.
+// what tix-for-jira generates.
 package jiratest
 
 import (

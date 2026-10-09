@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nyactl/tix-jira/internal/config"
-	"github.com/nyactl/tix-jira/internal/jira"
-	"github.com/nyactl/tix-jira/internal/jiratest"
+	"github.com/nyactl/tix-for-jira/internal/config"
+	"github.com/nyactl/tix-for-jira/internal/jira"
+	"github.com/nyactl/tix-for-jira/internal/jiratest"
 )
 
 // fixture builds a site where Max (the user) has PROJ-1 and PROJ-3, Alice

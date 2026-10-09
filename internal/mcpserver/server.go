@@ -1,4 +1,4 @@
-// Package mcpserver exposes tix-jira's operations as MCP tools over stdio.
+// Package mcpserver exposes tix-for-jira's operations as MCP tools over stdio.
 package mcpserver
 
 import (
@@ -9,10 +9,10 @@ import (
 	"unicode/utf8"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/nyactl/tix-jira/internal/config"
-	"github.com/nyactl/tix-jira/internal/core"
-	"github.com/nyactl/tix-jira/internal/render"
-	"github.com/nyactl/tix-jira/internal/sanitize"
+	"github.com/nyactl/tix-for-jira/internal/config"
+	"github.com/nyactl/tix-for-jira/internal/core"
+	"github.com/nyactl/tix-for-jira/internal/render"
+	"github.com/nyactl/tix-for-jira/internal/sanitize"
 )
 
 // Options configure the server.
@@ -50,7 +50,7 @@ func instructions(site string, mode config.PrivacyMode, writes bool) string {
 // New builds the MCP server.
 func New(svc *core.Service, opts Options) *mcp.Server {
 	s := &server{svc: svc, opts: opts, gate: newGate()}
-	srv := mcp.NewServer(&mcp.Implementation{Name: "tix-jira", Version: opts.Version}, &mcp.ServerOptions{
+	srv := mcp.NewServer(&mcp.Implementation{Name: "tix-for-jira", Version: opts.Version}, &mcp.ServerOptions{
 		Instructions: instructions(svc.Site(), svc.Mode(), opts.AllowWrites),
 	})
 	s.registerReads(srv)

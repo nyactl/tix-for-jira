@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nyactl/tix-jira/internal/config"
-	"github.com/nyactl/tix-jira/internal/jiratest"
-	"github.com/nyactl/tix-jira/internal/secret"
+	"github.com/nyactl/tix-for-jira/internal/config"
+	"github.com/nyactl/tix-for-jira/internal/jiratest"
+	"github.com/nyactl/tix-for-jira/internal/secret"
 )
 
 // script is a fake terminal that answers prompts in order.

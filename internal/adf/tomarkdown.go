@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// Node is an ADF node. Only the fields tix-jira uses are modelled.
+// Node is an ADF node. Only the fields tix-for-jira uses are modelled.
 type Node struct {
 	Type    string         `json:"type"`
 	Version int            `json:"version,omitempty"`

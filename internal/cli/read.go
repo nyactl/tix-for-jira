@@ -3,8 +3,8 @@ package cli
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/nyactl/tix-jira/internal/core"
-	"github.com/nyactl/tix-jira/internal/render"
+	"github.com/nyactl/tix-for-jira/internal/core"
+	"github.com/nyactl/tix-for-jira/internal/render"
 )
 
 func (a *App) addReadCommands(root *cobra.Command) {
@@ -127,7 +127,7 @@ func (a *App) addReadCommands(root *cobra.Command) {
 	}
 	attachment.Flags().String("dir", ".", "directory to save into (a subdirectory per ticket is created)")
 
-	linkTypes := noArgCmd(a, "link-types", "List link relations for `tix-jira link`", func(cmd *cobra.Command, svc *core.Service) error {
+	linkTypes := noArgCmd(a, "link-types", "List link relations for `tix link`", func(cmd *cobra.Command, svc *core.Service) error {
 		ls, err := svc.LinkTypes(cmd.Context())
 		if err != nil {
 			return err

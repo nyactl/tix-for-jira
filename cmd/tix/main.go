@@ -1,4 +1,4 @@
-// Command tix-jira works on your own Jira Cloud tickets from the terminal
+// Command tix-for-jira works on your own Jira Cloud tickets from the terminal
 // or as an MCP server, with a privacy scope and confirmed writes.
 package main
 
@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/nyactl/tix-jira/internal/cli"
+	"github.com/nyactl/tix-for-jira/internal/cli"
 )
 
 var version = "dev"

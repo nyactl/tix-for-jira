@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nyactl/tix-jira/internal/jira"
+	"github.com/nyactl/tix-for-jira/internal/jira"
 )
 
 // Kind classifies a write for the confirmation step.
@@ -120,7 +120,7 @@ func (s *Service) PlanUpdate(ctx context.Context, key string, changes []FieldInp
 		}
 		k := fieldKind(id, m)
 		if k == kindUnsupported {
-			return nil, fmt.Errorf("%s cannot be changed with tix-jira", m.Name)
+			return nil, fmt.Errorf("%s cannot be changed with tix-for-jira", m.Name)
 		}
 		v, err := s.convert(k, m, ch.Value)
 		if err != nil {
@@ -293,7 +293,7 @@ func (s *Service) PlanCreate(ctx context.Context, in CreateInput) (*Plan, error)
 		}
 		k := fieldKind(id, withSet(m))
 		if k == kindUnsupported {
-			return fmt.Errorf("%s cannot be set with tix-jira", m.Name)
+			return fmt.Errorf("%s cannot be set with tix-for-jira", m.Name)
 		}
 		v, err := s.convert(k, m, value)
 		if err != nil {

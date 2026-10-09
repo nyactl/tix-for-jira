@@ -17,4 +17,4 @@ First release, tested against Jira Cloud with a non-admin account.
 - Markdown <-> Atlassian Document Format conversion with `@[label]` mentions.
 - Profiles (`--profile`, `TIX_JIRA_PROFILE`) to switch between sites; development builds require an explicit profile.
 
-[0.1.0]: https://github.com/nyactl/tix-jira/releases/tag/v0.1.0
+[0.1.0]: https://github.com/nyactl/tix-for-jira/releases/tag/v0.1.0

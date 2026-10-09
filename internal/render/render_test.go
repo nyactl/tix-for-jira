@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nyactl/tix-jira/internal/core"
+	"github.com/nyactl/tix-for-jira/internal/core"
 )
 
 func TestIssueList(t *testing.T) {

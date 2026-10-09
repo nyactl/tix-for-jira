@@ -7,7 +7,7 @@ import (
 	"github.com/keybase/go-keychain"
 )
 
-const service = "tix-jira"
+const service = "tix-for-jira"
 
 // Keychain stores tokens as generic passwords in the login keychain.
 //
@@ -43,7 +43,7 @@ func (k Keychain) Set(account, token string) error {
 	item.SetSecClass(keychain.SecClassGenericPassword)
 	item.SetService(service)
 	item.SetAccount(account)
-	item.SetLabel("tix-jira API token (" + account + ")")
+	item.SetLabel("tix-for-jira API token (" + account + ")")
 	item.SetData([]byte(token))
 	item.SetSynchronizable(keychain.SynchronizableNo)
 	if err := keychain.AddItem(item); err != nil {

@@ -37,7 +37,7 @@ func TestRequestHeaders(t *testing.T) {
 		if r.Header.Get("Authorization") != wantAuth {
 			t.Errorf("Authorization = %q", r.Header.Get("Authorization"))
 		}
-		if r.Header.Get("User-Agent") != "tix-jira/test" {
+		if r.Header.Get("User-Agent") != "tix-for-jira/test" {
 			t.Errorf("User-Agent = %q", r.Header.Get("User-Agent"))
 		}
 		writeJSON(w, 200, User{AccountID: "acc-me", DisplayName: "Me Myself"})

@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve tix-jira. Bug reports, fixes and focused feature proposals are welcome.
+Thanks for helping improve tix-for-jira. Bug reports, fixes and focused feature proposals are welcome.
 
 ## Before you start
 
@@ -13,17 +13,17 @@ Thanks for helping improve tix-jira. Bug reports, fixes and focused feature prop
 Requires macOS (for the Keychain code) and Go 1.26 or newer.
 
 ```sh
-git clone git@github.com:nyactl/tix-jira.git
-cd tix-jira
+git clone git@github.com:nyactl/tix-for-jira.git
+cd tix-for-jira
 make test    # unit tests
 make lint
-make dev     # installs tix-jira-dev; use it with --profile test
+make dev     # installs tix-dev; use it with --profile test
 make it      # integration tests against the test site, see integration/README.md
 ```
 
 Unit tests must not contact a real Jira site: use `internal/jiratest`, the in-memory fake. Changes to Jira API usage should also be checked with the integration suite, see [integration/README.md](integration/README.md).
 
-## Rules that keep tix-jira safe
+## Rules that keep tix-for-jira safe
 
 Read [docs/design.md](docs/design.md) first. In short:
 

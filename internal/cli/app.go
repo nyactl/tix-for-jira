@@ -1,4 +1,4 @@
-// Package cli implements the tix-jira command line.
+// Package cli implements the tix-for-jira command line.
 package cli
 
 import (
@@ -15,12 +15,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/nyactl/tix-jira/internal/config"
-	"github.com/nyactl/tix-jira/internal/core"
-	"github.com/nyactl/tix-jira/internal/jira"
-	"github.com/nyactl/tix-jira/internal/render"
-	"github.com/nyactl/tix-jira/internal/sanitize"
-	"github.com/nyactl/tix-jira/internal/secret"
+	"github.com/nyactl/tix-for-jira/internal/config"
+	"github.com/nyactl/tix-for-jira/internal/core"
+	"github.com/nyactl/tix-for-jira/internal/jira"
+	"github.com/nyactl/tix-for-jira/internal/render"
+	"github.com/nyactl/tix-for-jira/internal/sanitize"
+	"github.com/nyactl/tix-for-jira/internal/secret"
 )
 
 // App holds the command dependencies, replaceable in tests.
@@ -71,9 +71,9 @@ func (s sanitizeWriter) Write(p []byte) (int, error) {
 
 func (a *App) root() *cobra.Command {
 	root := &cobra.Command{
-		Use:           "tix-jira",
+		Use:           "tix",
 		Short:         "Work on your own Jira Cloud tickets from the terminal or an MCP client",
-		Long:          "tix-jira reads and changes your own Jira Cloud tickets. Every change asks for confirmation in the terminal.\nRun `tix-jira auth login` first.",
+		Long:          "tix-for-jira reads and changes your own Jira Cloud tickets. Every change asks for confirmation in the terminal.\nRun `tix auth login` first.",
 		SilenceUsage:  true,
 		SilenceErrors: false,
 		Version:       a.Version,
@@ -166,5 +166,5 @@ func defaultDownloadDir() string {
 	if err != nil {
 		dir = os.TempDir()
 	}
-	return filepath.Join(dir, "tix-jira", "attachments")
+	return filepath.Join(dir, "tix-for-jira", "attachments")
 }

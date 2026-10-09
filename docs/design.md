@@ -1,10 +1,10 @@
-# tix-jira design
+# tix-for-jira design
 
-tix-jira lets an assistant work on **your own** Jira Cloud tickets through MCP, with a CLI for you. It is built around three rules:
+tix-for-jira lets an assistant work on **your own** Jira Cloud tickets through MCP, with a CLI for you. It is built around three rules:
 
 1. **Scope:** by default the assistant only sees tickets assigned to you, and other people appear as stable placeholders ("Person A"), never by name, email or account ID.
 2. **Consent:** every write needs explicit approval from the human. An assistant can request a write; it cannot approve it.
-3. **Containment:** the API token lives in the macOS Keychain, readable only by the tix-jira binary without a prompt. Nothing the assistant controls can widen the scope, read the token, or skip a confirmation.
+3. **Containment:** the API token lives in the macOS Keychain, readable only by the tix-for-jira binary without a prompt. Nothing the assistant controls can widen the scope, read the token, or skip a confirmation.
 
 ## Components
 
@@ -27,7 +27,7 @@ cmd: main.go
 
 ## Privacy scope
 
-The mode is set in the config file and can only be changed from an interactive terminal (`tix-jira config privacy`). The MCP server reads it once at start.
+The mode is set in the config file and can only be changed from an interactive terminal (`tix config privacy`). The MCP server reads it once at start.
 
 **`own` (default)**
 
@@ -39,7 +39,7 @@ The mode is set in the config file and can only be changed from an interactive t
 
 **`off`** shows everything Jira shows you. Placeholders are not used.
 
-Mentions in text written by the assistant use `@[Person A]` (or `@[Display Name]` in `off` mode). The label is resolved to the account ID inside tix-jira; only people already seen in this session can be mentioned, so the tool never queries the user directory.
+Mentions in text written by the assistant use `@[Person A]` (or `@[Display Name]` in `off` mode). The label is resolved to the account ID inside tix-for-jira; only people already seen in this session can be mentioned, so the tool never queries the user directory.
 
 ## Writes and consent
 
@@ -52,16 +52,16 @@ Every write is built as a **plan** first: a human-readable description of exactl
 
 All writes need approval because even additive writes publish text under your name, which a prompt-injected assistant could misuse to leak data.
 
-- **MCP:** write tools are registered only with `tix-jira mcp --allow-writes`. Each call returns an elicitation request (SEP-2322 input request; the SDK falls back to a server-initiated elicitation on older protocol versions) showing the plan. The assistant cannot answer an elicitation. The request state is single-use, expires after 10 minutes and is HMAC-bound to the exact tool arguments. Clients without elicitation support cannot write.
+- **MCP:** write tools are registered only with `tix mcp --allow-writes`. Each call returns an elicitation request (SEP-2322 input request; the SDK falls back to a server-initiated elicitation on older protocol versions) showing the plan. The assistant cannot answer an elicitation. The request state is single-use, expires after 10 minutes and is HMAC-bound to the exact tool arguments. Clients without elicitation support cannot write.
 - **CLI:** the confirmation is read from the controlling terminal, not stdin, so neither pipes nor an assistant running the command can answer it. Additive writes ask `y/N`; destructive writes ask you to type the issue key.
 
 Deleting issues, comments or worklogs is not supported.
 
 ## Credentials
 
-`tix-jira auth login` asks for site, email and API token on the terminal (token without echo), verifies them against `/rest/api/3/myself`, and stores the token in the login Keychain. The item is created by tix-jira itself, so its access list trusts only the tix-jira binary; other programs, including `security find-generic-password`, trigger a macOS prompt. Rebuilding an unsigned binary changes its identity, so macOS asks once more after each rebuild.
+`tix auth login` asks for site, email and API token on the terminal (token without echo), verifies them against `/rest/api/3/myself`, and stores the token in the login Keychain. The item is created by tix-for-jira itself, so its access list trusts only the tix-for-jira binary; other programs, including `security find-generic-password`, trigger a macOS prompt. Rebuilding an unsigned binary changes its identity, so macOS asks once more after each rebuild.
 
-API tokens expire after at most a year. The expiry date can be recorded at login; tix-jira warns two weeks before it.
+API tokens expire after at most a year. The expiry date can be recorded at login; tix-for-jira warns two weeks before it.
 
 ## Jira client
 

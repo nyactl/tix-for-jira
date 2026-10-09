@@ -2,7 +2,7 @@ package jira
 
 import "encoding/json"
 
-// These types mirror the Jira Cloud REST v3 responses tix-jira reads. They
+// These types mirror the Jira Cloud REST v3 responses tix-for-jira reads. They
 // carry raw personal data (account IDs, names, emails) and must never be
 // printed directly; package core turns them into redacted views.
 
@@ -85,7 +85,7 @@ type TimeTracking struct {
 	TimeSpent         string `json:"timeSpent,omitempty"`
 }
 
-// Fields holds the system fields tix-jira understands.
+// Fields holds the system fields tix-for-jira understands.
 type Fields struct {
 	Summary      string          `json:"summary"`
 	Status       *Status         `json:"status"`

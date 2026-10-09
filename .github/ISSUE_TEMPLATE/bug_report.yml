@@ -22,7 +22,7 @@ body:
     id: version
     attributes:
       label: Version
-      description: Output of `tix-jira --version`.
+      description: Output of `tix --version`.
     validations:
       required: true
   - type: dropdown

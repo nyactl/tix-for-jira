@@ -3,8 +3,8 @@ package privacy
 import (
 	"testing"
 
-	"github.com/nyactl/tix-jira/internal/config"
-	"github.com/nyactl/tix-jira/internal/jira"
+	"github.com/nyactl/tix-for-jira/internal/config"
+	"github.com/nyactl/tix-for-jira/internal/jira"
 )
 
 var (

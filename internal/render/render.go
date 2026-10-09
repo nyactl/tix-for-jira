@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/nyactl/tix-jira/internal/core"
-	"github.com/nyactl/tix-jira/internal/sanitize"
+	"github.com/nyactl/tix-for-jira/internal/core"
+	"github.com/nyactl/tix-for-jira/internal/sanitize"
 )
 
 // JSON renders any view as indented JSON.

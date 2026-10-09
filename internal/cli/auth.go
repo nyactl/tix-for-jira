@@ -9,8 +9,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/nyactl/tix-jira/internal/config"
-	"github.com/nyactl/tix-jira/internal/secret"
+	"github.com/nyactl/tix-for-jira/internal/config"
+	"github.com/nyactl/tix-for-jira/internal/secret"
 )
 
 func (a *App) authCmd() *cobra.Command {
@@ -214,7 +214,7 @@ func (a *App) configCmd() *cobra.Command {
 				return err
 			}
 			if len(names) == 0 {
-				_, err := fmt.Fprintln(a.Out, "No profiles yet; run `tix-jira auth login`.")
+				_, err := fmt.Fprintln(a.Out, "No profiles yet; run `tix auth login`.")
 				return err
 			}
 			for _, n := range names {

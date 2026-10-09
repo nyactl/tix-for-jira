@@ -10,7 +10,7 @@ Please do not open a public issue. Report privately through the repository's **S
 
 You will get an acknowledgement within 7 days. Fixes are released before details are published, and reporters are credited unless they prefer otherwise.
 
-## What tix-jira promises
+## What tix-for-jira promises
 
 Reports that break any of these are in scope:
 

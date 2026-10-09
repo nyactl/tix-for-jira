@@ -15,9 +15,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nyactl/tix-jira/internal/config"
-	"github.com/nyactl/tix-jira/internal/jira"
-	"github.com/nyactl/tix-jira/internal/sanitize"
+	"github.com/nyactl/tix-for-jira/internal/config"
+	"github.com/nyactl/tix-for-jira/internal/jira"
+	"github.com/nyactl/tix-for-jira/internal/sanitize"
 )
 
 // summaryFields includes the reporter only to learn their name for redaction.

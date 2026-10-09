@@ -10,7 +10,7 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/nyactl/tix-jira/internal/sanitize"
+	"github.com/nyactl/tix-for-jira/internal/sanitize"
 )
 
 // Terminal is the controlling terminal. Confirmations and secrets are read

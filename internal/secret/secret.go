@@ -7,7 +7,7 @@ import (
 )
 
 // ErrNotFound means no token is stored for the account.
-var ErrNotFound = errors.New("no API token stored; run `tix-jira auth login`")
+var ErrNotFound = errors.New("no API token stored; run `tix auth login`")
 
 // Store keeps one token per account key (site and email).
 type Store interface {

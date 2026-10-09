@@ -1,5 +1,5 @@
 // Package jira is a minimal Jira Cloud REST v3 client covering what
-// tix-jira needs. It runs with the permissions of the token's user; no
+// tix-for-jira needs. It runs with the permissions of the token's user; no
 // admin endpoints are used.
 package jira
 
@@ -27,7 +27,7 @@ const (
 )
 
 var (
-	ErrUnauthorized = errors.New("credentials rejected by Jira: the API token may be expired or revoked; create a new one at https://id.atlassian.com/manage-profile/security/api-tokens and run `tix-jira auth login`")
+	ErrUnauthorized = errors.New("credentials rejected by Jira: the API token may be expired or revoked; create a new one at https://id.atlassian.com/manage-profile/security/api-tokens and run `tix auth login`")
 	ErrNotFound     = errors.New("not found, or you do not have permission to see it")
 )
 
@@ -70,7 +70,7 @@ func New(site, email, token, version string, opts ...Option) *Client {
 	c := &Client{
 		site:      strings.TrimRight(site, "/"),
 		auth:      "Basic " + base64.StdEncoding.EncodeToString([]byte(email+":"+token)),
-		userAgent: "tix-jira/" + version,
+		userAgent: "tix-for-jira/" + version,
 		http: &http.Client{
 			Timeout:       60 * time.Second,
 			CheckRedirect: sameOrigin,
