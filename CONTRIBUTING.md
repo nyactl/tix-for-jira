@@ -13,7 +13,7 @@ Thanks for helping improve tix-for-jira. Bug reports, fixes and focused feature 
 Requires macOS (for the Keychain code) and Go 1.26 or newer.
 
 ```sh
-git clone git@github.com:nyactl/tix-for-jira.git
+git clone https://github.com/nyactl/tix-for-jira.git
 cd tix-for-jira
 make test    # unit tests
 make lint

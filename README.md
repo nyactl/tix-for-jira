@@ -11,11 +11,9 @@
 
 ## Install
 
-Requires macOS and Go 1.26+. The repository is private, so Go fetches it over SSH:
+Requires macOS and Go 1.26+:
 
 ```sh
-go env -w GOPRIVATE=github.com/nyactl/*
-git config --global url."git@github.com:nyactl/".insteadOf "https://github.com/nyactl/"
 go install github.com/nyactl/tix-for-jira/cmd/tix@latest
 ```
 
