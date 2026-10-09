@@ -279,7 +279,7 @@ func TestIntegration(t *testing.T) {
 	})
 
 	t.Run("subtask", func(t *testing.T) {
-		msg := applied(t)(s.svc.PlanCreate(ctx, core.CreateInput{Project: s.project, Type: "Subtask", Summary: "tix-jira integration subtask " + s.run, Parent: a}))
+		msg := applied(t)(s.svc.PlanCreate(ctx, core.CreateInput{Project: s.project, Type: "Subtask", Summary: "tix-jira integration subtask " + s.run, Parent: a, Labels: []string{"tix-jira-it"}}))
 		var sub string
 		if _, err := fmt.Sscanf(msg, "Created %s", &sub); err != nil {
 			t.Fatalf("unexpected create result %q", msg)

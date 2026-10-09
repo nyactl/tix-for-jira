@@ -31,7 +31,7 @@ go test -tags integration -count=1 -v ./integration/
 
 Tokens are read from the Keychain items created by `tix-jira auth login`. Because the test binary is a different program, macOS asks once per item whether it may read it; choose **Allow** (not "Always Allow", as the test binary changes on every build).
 
-Tickets created by the tests carry the label `tix-jira-it` and a timestamp, and are moved to a done status when the run ends, so they no longer show up as open work. tix-jira cannot delete tickets; remove them in Jira when you no longer need them.
+Tickets created by the tests carry the label `tix-jira-it` and a timestamp, and are moved to a done status when the run ends, so they no longer show up as open work. tix-jira cannot delete tickets; remove them in Jira when you no longer need them. To close tickets left open by interrupted runs, run the suite once with `TIX_JIRA_IT_CLEANUP=1`.
 
 ## What is checked
 
