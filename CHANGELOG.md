@@ -11,3 +11,4 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 - Privacy mode `own`: only your tickets, other people as stable placeholders.
 - API token storage in the macOS Keychain with expiry warnings; `auth login --with-token` reads the token from stdin.
 - Markdown <-> Atlassian Document Format conversion with `@[label]` mentions.
+- Profiles (`--profile`, `TIX_JIRA_PROFILE`) to switch between sites; development builds require an explicit profile.

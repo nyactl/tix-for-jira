@@ -85,6 +85,31 @@ No credentials go into the client configuration; tix-jira reads them from its ow
 
 Every tool carries `readOnlyHint` / `destructiveHint` annotations.
 
+## Profiles: test and production
+
+Each profile has its own site, account, privacy mode and token, so a test site and your production site never mix:
+
+```sh
+tix-jira auth login                      # profile "default", e.g. production
+tix-jira --profile test auth login       # a test site
+tix-jira config profiles                 # list profiles; * marks the selected one
+tix-jira --profile test mine             # or: export TIX_JIRA_PROFILE=test
+```
+
+Every confirmation prompt and approval dialog starts with the site and profile it applies to. For MCP, register one server per profile, e.g. `tix-jira --profile test mcp`.
+
+### Developing while using it
+
+Keep a released build for daily work and a development build for the test site:
+
+```sh
+go install github.com/nyactl/tix-jira@latest   # released build: tix-jira, profile "default"
+make dev                                        # development build: tix-jira-dev
+tix-jira-dev --profile test mine
+```
+
+Development builds refuse to run unless a profile is chosen explicitly (`--profile` or `TIX_JIRA_PROFILE`), so work in progress cannot reach production by accident. macOS asks for Keychain access again after each rebuild, because the binary changed.
+
 ## Privacy modes
 
 | | `own` (default) | `off` |

@@ -15,8 +15,10 @@ Requires macOS (for the Keychain code) and Go 1.26 or newer.
 ```sh
 git clone git@github.com:nyactl/tix-jira.git
 cd tix-jira
-go test -race ./...
-golangci-lint run ./...
+make test    # unit tests
+make lint
+make dev     # installs tix-jira-dev; use it with --profile test
+make it      # integration tests against the test site, see integration/README.md
 ```
 
 Unit tests must not contact a real Jira site: use `internal/jiratest`, the in-memory fake. Changes to Jira API usage should also be checked with the integration suite, see [integration/README.md](integration/README.md).
