@@ -78,6 +78,7 @@ func (a *App) root() *cobra.Command {
 		Version:       a.Version,
 	}
 	root.PersistentFlags().Bool("json", false, "print JSON instead of Markdown")
+	root.PersistentFlags().String("profile", "", "config profile to use, e.g. test (default: $TIX_JIRA_PROFILE or \"default\")")
 	root.AddCommand(a.authCmd(), a.configCmd(), a.mcpCmd())
 	a.addReadCommands(root)
 	a.addWriteCommands(root)
@@ -97,9 +98,31 @@ func (a *App) print(cmd *cobra.Command, v any, markdown func() string) error {
 	return err
 }
 
-// service loads settings and the token and connects to Jira.
-func (a *App) service(ctx context.Context) (*core.Service, *config.Config, error) {
-	cfg, err := config.Load()
+var errDevNeedsProfile = errors.New("this is a development build: choose a profile explicitly with --profile or TIX_JIRA_PROFILE, so it cannot touch your production site by accident")
+
+// profile returns the selected profile name. Development builds must name
+// one explicitly.
+func (a *App) profile(cmd *cobra.Command) (string, error) {
+	p, _ := cmd.Flags().GetString("profile")
+	if a.Version == "dev" && p == "" && os.Getenv("TIX_JIRA_PROFILE") == "" && os.Getenv("TIX_JIRA_CONFIG") == "" {
+		return "", errDevNeedsProfile
+	}
+	return config.ResolveProfile(p)
+}
+
+// target describes where a write goes, so the human sees it when confirming.
+func target(site, profile string) string {
+	return fmt.Sprintf("Jira site: %s (profile %s)", site, profile)
+}
+
+// service loads the profile's settings and token and connects to Jira.
+func (a *App) service(cmd *cobra.Command) (*core.Service, *config.Config, error) {
+	ctx := cmd.Context()
+	prof, err := a.profile(cmd)
+	if err != nil {
+		return nil, nil, err
+	}
+	cfg, err := config.Load(prof)
 	if err != nil {
 		return nil, nil, err
 	}

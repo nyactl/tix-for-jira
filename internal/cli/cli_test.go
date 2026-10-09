@@ -59,7 +59,7 @@ func newEnv(t *testing.T) *env {
 func (e *env) loggedIn(t *testing.T) *env {
 	t.Helper()
 	cfg := &config.Config{Site: e.fake.URL(), Email: "me@example.com", Privacy: config.PrivacyOwn}
-	if err := cfg.Save(); err != nil {
+	if err := cfg.Save(""); err != nil {
 		t.Fatal(err)
 	}
 	if err := e.secrets.Set(secret.AccountKey(cfg.Site, cfg.Email), "tok-me"); err != nil {
@@ -93,7 +93,7 @@ func TestLogin(t *testing.T) {
 	if !strings.Contains(out, "Logged in as Max Mustermann") {
 		t.Errorf("out = %q", out)
 	}
-	cfg, err := config.Load()
+	cfg, err := config.Load("")
 	if err != nil || cfg.TokenExpiry != "2027-01-31" || cfg.Privacy != config.PrivacyOwn {
 		t.Fatalf("config = %+v, %v", cfg, err)
 	}
@@ -109,7 +109,7 @@ func TestLoginWithTokenFromStdin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg, _ := config.Load()
+	cfg, _ := config.Load("")
 	if tok, _ := e.secrets.Get(secret.AccountKey(cfg.Site, cfg.Email)); tok != "tok-me" {
 		t.Errorf("stored token = %q", tok)
 	}
@@ -123,7 +123,7 @@ func TestLoginRejectsBadTokenAndStoresNothing(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "credentials rejected by Jira") {
 		t.Fatalf("err = %v", err)
 	}
-	if _, err := config.Load(); !errors.Is(err, config.ErrNotConfigured) {
+	if _, err := config.Load(""); !errors.Is(err, config.ErrNotConfigured) {
 		t.Errorf("config written: %v", err)
 	}
 }
@@ -186,7 +186,7 @@ func TestCommentNeedsYes(t *testing.T) {
 	if !strings.Contains(out, "Added comment") || len(e.fake.Issues["PROJ-1"].Comments) != 1 {
 		t.Errorf("out = %q", out)
 	}
-	if !strings.Contains(e.tty.asked[len(e.tty.asked)-1], "Add a comment to PROJ-1") {
+	if last := e.tty.asked[len(e.tty.asked)-1]; !strings.Contains(last, "Add a comment to PROJ-1") || !strings.Contains(last, "Jira site: "+e.fake.URL()+" (profile default)") {
 		t.Errorf("prompt = %q", e.tty.asked)
 	}
 }
@@ -229,7 +229,7 @@ func TestWritesWithoutTerminalChangeNothing(t *testing.T) {
 	if len(i.Comments) != 0 || i.Summary != "Mine" || i.Status != "To Do" || len(i.Worklogs) != 0 || len(e.fake.Issues) != 2 {
 		t.Errorf("something changed: %+v", i)
 	}
-	if cfg, _ := config.Load(); cfg.Privacy != config.PrivacyOwn {
+	if cfg, _ := config.Load(""); cfg.Privacy != config.PrivacyOwn {
 		t.Error("privacy changed")
 	}
 }
@@ -270,13 +270,52 @@ func TestPrivacySwitch(t *testing.T) {
 
 func TestExpiryWarning(t *testing.T) {
 	e := newEnv(t).loggedIn(t)
-	cfg, _ := config.Load()
+	cfg, _ := config.Load("")
 	cfg.TokenExpiry = "2026-10-15"
-	if err := cfg.Save(); err != nil {
+	if err := cfg.Save(""); err != nil {
 		t.Fatal(err)
 	}
 	_, errOut, err := e.run(t, "whoami")
 	if err != nil || !strings.Contains(errOut, "expires on 2026-10-15 (in 7 days)") {
 		t.Errorf("err=%v stderr=%q", err, errOut)
+	}
+}
+
+func TestProfilesAreIsolated(t *testing.T) {
+	e := newEnv(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("TIX_JIRA_CONFIG", "")
+	t.Setenv("TIX_JIRA_PROFILE", "")
+
+	e.tty.noTTY = true
+	if _, _, err := e.runStdin(t, "tok-me\n", "auth", "login", "--profile", "test", "--site", e.fake.URL(), "--email", "me@example.com", "--expires", "", "--with-token"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := e.run(t, "mine"); !errors.Is(err, config.ErrNotConfigured) {
+		t.Errorf("default profile must stay unconfigured: %v", err)
+	}
+	if out, _, err := e.run(t, "mine", "--profile", "test"); err != nil || !strings.Contains(out, "PROJ-1") {
+		t.Errorf("--profile test: %v %q", err, out)
+	}
+	t.Setenv("TIX_JIRA_PROFILE", "test")
+	out, _, err := e.run(t, "config", "profiles")
+	if err != nil || !strings.Contains(out, "* test: "+e.fake.URL()) {
+		t.Errorf("profiles: %v %q", err, out)
+	}
+	if _, _, err := e.run(t, "mine", "--profile", "../etc"); err == nil {
+		t.Error("invalid profile name accepted")
+	}
+}
+
+func TestDevBuildNeedsExplicitProfile(t *testing.T) {
+	e := newEnv(t).loggedIn(t)
+	t.Setenv("TIX_JIRA_CONFIG", "")
+	t.Setenv("TIX_JIRA_PROFILE", "")
+	var out bytes.Buffer
+	app := &App{Version: "dev", In: strings.NewReader(""), Out: &out, Err: &out, TTY: e.tty, Secrets: e.secrets, Transport: e.fake.Transport(), Now: time.Now}
+	if err := app.Execute(context.Background(), []string{"mine"}); !errors.Is(err, errDevNeedsProfile) {
+		t.Errorf("err = %v", err)
 	}
 }

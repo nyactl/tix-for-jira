@@ -17,14 +17,15 @@ func (a *App) mcpCmd() *cobra.Command {
 			"clients that cannot show such dialogs cannot write.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			svc, cfg, err := a.service(cmd.Context())
+			svc, cfg, err := a.service(cmd)
 			if err != nil {
 				return err
 			}
+			prof, _ := a.profile(cmd)
 			writes, _ := cmd.Flags().GetBool("allow-writes")
 			dir, _ := cmd.Flags().GetString("download-dir")
-			_, _ = fmt.Fprintf(a.Err, "tix-jira %s: serving %s (privacy %s, writes %v)\n", a.Version, cfg.Site, cfg.Privacy, writes)
-			return mcpserver.Run(cmd.Context(), svc, mcpserver.Options{Version: a.Version, AllowWrites: writes, DownloadDir: dir})
+			_, _ = fmt.Fprintf(a.Err, "tix-jira %s: serving %s (profile %s, privacy %s, writes %v)\n", a.Version, cfg.Site, prof, cfg.Privacy, writes)
+			return mcpserver.Run(cmd.Context(), svc, mcpserver.Options{Version: a.Version, AllowWrites: writes, DownloadDir: dir, Target: target(cfg.Site, prof)})
 		},
 	}
 	cmd.Flags().Bool("allow-writes", false, "offer write tools (each write still needs your approval)")

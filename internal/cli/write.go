@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"os"
@@ -15,14 +14,19 @@ import (
 )
 
 // apply asks for confirmation on the terminal and applies the plan.
-func (a *App) apply(ctx context.Context, plan *core.Plan, err error) error {
+func (a *App) apply(cmd *cobra.Command, svc *core.Service, plan *core.Plan, err error) error {
 	if err != nil {
 		return err
 	}
-	if err := confirm(a.TTY, render.Plan(plan), plan.Key, plan.Kind == core.Destructive); err != nil {
+	prof, err := a.profile(cmd)
+	if err != nil {
 		return err
 	}
-	msg, err := plan.Apply(ctx)
+	desc := target(svc.Site(), prof) + "\n\n" + render.Plan(plan)
+	if err := confirm(a.TTY, desc, plan.Key, plan.Kind == core.Destructive); err != nil {
+		return err
+	}
+	msg, err := plan.Apply(cmd.Context())
 	if err != nil {
 		return err
 	}
@@ -62,12 +66,12 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 			if err != nil {
 				return err
 			}
-			svc, _, err := a.service(cmd.Context())
+			svc, _, err := a.service(cmd)
 			if err != nil {
 				return err
 			}
 			p, err := svc.PlanComment(cmd.Context(), args[0], body)
-			return a.apply(cmd.Context(), p, err)
+			return a.apply(cmd, svc, p, err)
 		},
 	}
 	comment.Flags().String("body", "", "comment text, or - to read it from stdin")
@@ -85,12 +89,12 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 			if err != nil {
 				return err
 			}
-			svc, _, err := a.service(cmd.Context())
+			svc, _, err := a.service(cmd)
 			if err != nil {
 				return err
 			}
 			p, err := svc.PlanUpdate(cmd.Context(), args[0], changes)
-			return a.apply(cmd.Context(), p, err)
+			return a.apply(cmd, svc, p, err)
 		},
 	}
 	update.Flags().StringArray("set", nil, `"Field name=value" (repeatable); see "tix-jira fields <key>"`)
@@ -105,12 +109,12 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 			if err != nil {
 				return err
 			}
-			svc, _, err := a.service(cmd.Context())
+			svc, _, err := a.service(cmd)
 			if err != nil {
 				return err
 			}
 			p, err := svc.PlanTransition(cmd.Context(), args[0], args[1], c)
-			return a.apply(cmd.Context(), p, err)
+			return a.apply(cmd, svc, p, err)
 		},
 	}
 	transition.Flags().String("comment", "", "comment to add, or - for stdin")
@@ -143,12 +147,12 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 					in.Fields[f.Field] = f.Value
 				}
 			}
-			svc, _, err := a.service(cmd.Context())
+			svc, _, err := a.service(cmd)
 			if err != nil {
 				return err
 			}
 			p, err := svc.PlanCreate(cmd.Context(), in)
-			return a.apply(cmd.Context(), p, err)
+			return a.apply(cmd, svc, p, err)
 		},
 	}
 	create.Flags().String("project", "", "project key")
@@ -172,12 +176,12 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 			if err != nil {
 				return err
 			}
-			svc, _, err := a.service(cmd.Context())
+			svc, _, err := a.service(cmd)
 			if err != nil {
 				return err
 			}
 			p, err := svc.PlanWorklog(cmd.Context(), args[0], args[1], started, c)
-			return a.apply(cmd.Context(), p, err)
+			return a.apply(cmd, svc, p, err)
 		},
 	}
 	logWork.Flags().String("started", "", "start time: 09:30 (today) or 2026-10-08 09:30; default now")
@@ -188,12 +192,12 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 		Short: `Link tickets, e.g. tix-jira link PROJ-1 "is blocked by" PROJ-2`,
 		Args:  cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			svc, _, err := a.service(cmd.Context())
+			svc, _, err := a.service(cmd)
 			if err != nil {
 				return err
 			}
 			p, err := svc.PlanLink(cmd.Context(), args[0], args[1], args[2])
-			return a.apply(cmd.Context(), p, err)
+			return a.apply(cmd, svc, p, err)
 		},
 	}
 

@@ -38,7 +38,7 @@ func connect(t *testing.T, writes bool, mode config.PrivacyMode, answer string, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := New(svc, Options{Version: "test", AllowWrites: writes, DownloadDir: t.TempDir()})
+	srv := New(svc, Options{Version: "test", AllowWrites: writes, DownloadDir: t.TempDir(), Target: "Jira site: fake (profile test)"})
 	st, ct := mcp.NewInMemoryTransports()
 	if _, err := srv.Connect(ctx, st, nil); err != nil {
 		t.Fatal(err)
@@ -165,7 +165,7 @@ func TestWriteNeedsApproval(t *testing.T) {
 		if isErr {
 			t.Fatalf("protocol %q: %s", protocol, out)
 		}
-		if len(h.asked) != 1 || !strings.Contains(h.asked[0], "Add a comment to PROJ-1") || !strings.Contains(h.asked[0], "@[Person A]") {
+		if len(h.asked) != 1 || !strings.HasPrefix(h.asked[0], "Jira site: fake (profile test)\n\nAdd a comment to PROJ-1") || !strings.Contains(h.asked[0], "@[Person A]") {
 			t.Errorf("protocol %q: asked %q", protocol, h.asked)
 		}
 		if n := len(h.fake.Issues["PROJ-1"].Comments); n != 1 {

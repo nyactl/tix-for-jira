@@ -13,7 +13,7 @@ func (a *App) addReadCommands(root *cobra.Command) {
 		Short: "List tickets assigned to you, most recently updated first",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			svc, _, err := a.service(cmd.Context())
+			svc, _, err := a.service(cmd)
 			if err != nil {
 				return err
 			}
@@ -40,7 +40,7 @@ func (a *App) addReadCommands(root *cobra.Command) {
 		Short: "Search with JQL, limited to your privacy scope",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			svc, _, err := a.service(cmd.Context())
+			svc, _, err := a.service(cmd)
 			if err != nil {
 				return err
 			}
@@ -113,7 +113,7 @@ func (a *App) addReadCommands(root *cobra.Command) {
 		Short: "Download an attachment",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			svc, _, err := a.service(cmd.Context())
+			svc, _, err := a.service(cmd)
 			if err != nil {
 				return err
 			}
@@ -168,7 +168,7 @@ func keyCmd(a *App, use, short string, run func(*cobra.Command, *core.Service, s
 		Short: short,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			svc, _, err := a.service(cmd.Context())
+			svc, _, err := a.service(cmd)
 			if err != nil {
 				return err
 			}
@@ -183,7 +183,7 @@ func noArgCmd(a *App, use, short string, run func(*cobra.Command, *core.Service)
 		Short: short,
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			svc, _, err := a.service(cmd.Context())
+			svc, _, err := a.service(cmd)
 			if err != nil {
 				return err
 			}

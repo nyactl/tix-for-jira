@@ -26,8 +26,11 @@ func (a *App) authCmd() *cobra.Command {
 			site, _ := cmd.Flags().GetString("site")
 			email, _ := cmd.Flags().GetString("email")
 			expires, _ := cmd.Flags().GetString("expires")
-			prev, _ := config.Load()
-			var err error
+			prof, err := a.profile(cmd)
+			if err != nil {
+				return err
+			}
+			prev, _ := config.Load(prof)
 			if site == "" {
 				if site, err = a.TTY.Prompt("Jira site (e.g. your-team.atlassian.net): "); err != nil {
 					return err
@@ -76,10 +79,10 @@ func (a *App) authCmd() *cobra.Command {
 			if prev != nil && (prev.Site != cfg.Site || prev.Email != cfg.Email) {
 				_ = a.Secrets.Delete(secret.AccountKey(prev.Site, prev.Email))
 			}
-			if err := cfg.Save(); err != nil {
+			if err := cfg.Save(prof); err != nil {
 				return err
 			}
-			_, err = fmt.Fprintf(a.Out, "Logged in as %s on %s. Privacy mode: %s.\n", me.DisplayName, cfg.Site, cfg.Privacy)
+			_, err = fmt.Fprintf(a.Out, "Logged in as %s on %s (profile %s). Privacy mode: %s.\n", me.DisplayName, cfg.Site, prof, cfg.Privacy)
 			return err
 		},
 	}
@@ -93,7 +96,7 @@ func (a *App) authCmd() *cobra.Command {
 		Short: "Check that the stored credentials work",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			svc, cfg, err := a.service(cmd.Context())
+			svc, cfg, err := a.service(cmd)
 			if err != nil {
 				return err
 			}
@@ -105,7 +108,8 @@ func (a *App) authCmd() *cobra.Command {
 			if cfg.TokenExpiry != "" {
 				expiry = cfg.TokenExpiry
 			}
-			_, err = fmt.Fprintf(a.Out, "Logged in as %s on %s.\nPrivacy mode: %s.\nToken expiry: %s.\n", me.DisplayName, me.Site, me.Privacy, expiry)
+			prof, _ := a.profile(cmd)
+			_, err = fmt.Fprintf(a.Out, "Profile: %s.\nLogged in as %s on %s.\nPrivacy mode: %s.\nToken expiry: %s.\n", prof, me.DisplayName, me.Site, me.Privacy, expiry)
 			return err
 		},
 	}
@@ -115,11 +119,15 @@ func (a *App) authCmd() *cobra.Command {
 		Short: "Remove the stored API token",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg, err := config.Load()
+			prof, err := a.profile(cmd)
 			if err != nil {
 				return err
 			}
-			if err := confirm(a.TTY, fmt.Sprintf("Remove the API token for %s on %s from the Keychain?", cfg.Email, cfg.Site), "", false); err != nil {
+			cfg, err := config.Load(prof)
+			if err != nil {
+				return err
+			}
+			if err := confirm(a.TTY, fmt.Sprintf("Remove the API token for %s on %s (profile %s) from the Keychain?", cfg.Email, cfg.Site, prof), "", false); err != nil {
 				return err
 			}
 			if err := a.Secrets.Delete(secret.AccountKey(cfg.Site, cfg.Email)); err != nil {
@@ -140,13 +148,17 @@ func (a *App) configCmd() *cobra.Command {
 		Short: "Show the settings (the token is never shown)",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg, err := config.Load()
+			prof, err := a.profile(cmd)
 			if err != nil {
 				return err
 			}
-			path, _ := config.Path()
+			cfg, err := config.Load(prof)
+			if err != nil {
+				return err
+			}
+			path, _ := config.Path(prof)
 			return a.print(cmd, cfg, func() string {
-				return fmt.Sprintf("- Site: %s\n- Email: %s\n- Privacy: %s\n- Token expiry: %s\n- File: %s\n", cfg.Site, cfg.Email, cfg.Privacy, orDash(cfg.TokenExpiry), path)
+				return fmt.Sprintf("- Profile: %s\n- Site: %s\n- Email: %s\n- Privacy: %s\n- Token expiry: %s\n- File: %s\n", prof, cfg.Site, cfg.Email, cfg.Privacy, orDash(cfg.TokenExpiry), path)
 			})
 		},
 	}
@@ -159,7 +171,11 @@ func (a *App) configCmd() *cobra.Command {
 		Args:      cobra.ExactArgs(1),
 		ValidArgs: []string{"own", "off"},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load()
+			prof, err := a.profile(cmd)
+			if err != nil {
+				return err
+			}
+			cfg, err := config.Load(prof)
 			if err != nil {
 				return err
 			}
@@ -168,7 +184,7 @@ func (a *App) configCmd() *cobra.Command {
 				return fmt.Errorf("unknown mode %q; use own or off", args[0])
 			}
 			if mode == config.PrivacyOff && cfg.Privacy != config.PrivacyOff {
-				answer, err := a.TTY.Prompt("Privacy off lets assistants see every ticket you can see, with real names.\nType off to confirm: ")
+				answer, err := a.TTY.Prompt(target(cfg.Site, prof) + "\n\nPrivacy off lets assistants see every ticket you can see, with real names.\nType off to confirm: ")
 				if err != nil {
 					return err
 				}
@@ -177,14 +193,47 @@ func (a *App) configCmd() *cobra.Command {
 				}
 			}
 			cfg.Privacy = mode
-			if err := cfg.Save(); err != nil {
+			if err := cfg.Save(prof); err != nil {
 				return err
 			}
 			_, err = fmt.Fprintf(a.Out, "Privacy mode: %s. Restart MCP clients to apply it.\n", mode)
 			return err
 		},
 	}
-	cmd.AddCommand(show, privacy)
+	profiles := &cobra.Command{
+		Use:   "profiles",
+		Short: "List configured profiles",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			current, err := a.profile(cmd)
+			if err != nil {
+				return err
+			}
+			names, err := config.Profiles()
+			if err != nil {
+				return err
+			}
+			if len(names) == 0 {
+				_, err := fmt.Fprintln(a.Out, "No profiles yet; run `tix-jira auth login`.")
+				return err
+			}
+			for _, n := range names {
+				mark := " "
+				if n == current {
+					mark = "*"
+				}
+				line := fmt.Sprintf("%s %s", mark, n)
+				if cfg, err := config.Load(n); err == nil {
+					line += fmt.Sprintf(": %s (%s, privacy %s)", cfg.Site, cfg.Email, cfg.Privacy)
+				}
+				if _, err := fmt.Fprintln(a.Out, line); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}
+	cmd.AddCommand(show, privacy, profiles)
 	return cmd
 }
 
