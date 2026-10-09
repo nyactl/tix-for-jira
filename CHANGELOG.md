@@ -4,6 +4,8 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ## Unreleased
 
+## [0.1.1] - 2026-10-09
+
 ### Added
 
 - Homebrew formula: `brew install nyactl/tap/tix-for-jira`.
@@ -26,4 +28,5 @@ First release, tested against Jira Cloud with a non-admin account.
 - Markdown <-> Atlassian Document Format conversion with `@[label]` mentions.
 - Profiles (`--profile`, `TIX_JIRA_PROFILE`) to switch between sites; development builds require an explicit profile.
 
+[0.1.1]: https://github.com/nyactl/tix-for-jira/releases/tag/v0.1.1
 [0.1.0]: https://github.com/nyactl/tix-for-jira/releases/tag/v0.1.0
