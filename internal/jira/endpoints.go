@@ -198,8 +198,9 @@ func (c *Client) Transitions(ctx context.Context, key string) ([]Transition, err
 	return out.Transitions, nil
 }
 
-// DoTransition moves an issue, optionally adding an ADF comment.
-func (c *Client) DoTransition(ctx context.Context, key, transitionID string, comment json.RawMessage) error {
+// DoTransition moves an issue. Comments are not sent along: Jira silently
+// drops them unless the transition has a screen with a comment field.
+func (c *Client) DoTransition(ctx context.Context, key, transitionID string) error {
 	p, err := issuePath(key, "/transitions")
 	if err != nil {
 		return err
@@ -208,9 +209,6 @@ func (c *Client) DoTransition(ctx context.Context, key, transitionID string, com
 		return err
 	}
 	body := map[string]any{"transition": map[string]string{"id": transitionID}}
-	if comment != nil {
-		body["update"] = map[string]any{"comment": []any{map[string]any{"add": map[string]any{"body": comment}}}}
-	}
 	return c.do(ctx, http.MethodPost, p, nil, body, nil)
 }
 

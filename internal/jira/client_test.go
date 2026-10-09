@@ -215,7 +215,7 @@ func TestInvalidKeyMakesNoRequest(t *testing.T) {
 	if err := c.EditIssue(ctx, "..", nil); err == nil {
 		t.Error("EditIssue accepted bad key")
 	}
-	if err := c.DoTransition(ctx, "A-1", "../1", nil); err == nil {
+	if err := c.DoTransition(ctx, "A-1", "../1"); err == nil {
 		t.Error("DoTransition accepted bad transition id")
 	}
 	if _, err := c.DownloadAttachment(ctx, "../1", io.Discard, 10); err == nil {
@@ -256,8 +256,7 @@ func TestWriteBodies(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	ctx := context.Background()
-	adf := json.RawMessage(`{"type":"doc","version":1,"content":[]}`)
-	if err := c.DoTransition(ctx, "A-1", "31", adf); err != nil {
+	if err := c.DoTransition(ctx, "A-1", "31"); err != nil {
 		t.Fatal(err)
 	}
 	if err := c.CreateLink(ctx, "Blocks", "A-1", "A-2"); err != nil {
@@ -269,8 +268,8 @@ func TestWriteBodies(t *testing.T) {
 	if got[0]["_route"] != "POST /rest/api/3/issue/A-1/transitions" || got[0]["transition"].(map[string]any)["id"] != "31" {
 		t.Errorf("transition body = %v", got[0])
 	}
-	if _, ok := got[0]["update"].(map[string]any)["comment"]; !ok {
-		t.Errorf("transition comment missing: %v", got[0])
+	if _, ok := got[0]["update"]; ok {
+		t.Errorf("transition must not carry a comment: %v", got[0])
 	}
 	if got[1]["inwardIssue"].(map[string]any)["key"] != "A-1" || got[1]["outwardIssue"].(map[string]any)["key"] != "A-2" {
 		t.Errorf("link body = %v", got[1])

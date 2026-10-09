@@ -476,13 +476,9 @@ func (f *Fake) issueRoute(w http.ResponseWriter, r *http.Request, i *Issue, sub 
 		tr, _ := body["transition"].(map[string]any)
 		for _, t := range transitions {
 			if t.id == tr["id"] {
+				// Like Jira without a transition screen, comments sent along
+				// with a transition are silently ignored.
 				i.Status = t.to
-				if upd, ok := body["update"].(map[string]any); ok {
-					if cs, ok := upd["comment"].([]any); ok && len(cs) > 0 {
-						raw, _ := json.Marshal(cs[0].(map[string]any)["add"].(map[string]any)["body"])
-						i.Comments = append(i.Comments, Comment{ID: f.id(), Author: me.AccountID, Body: raw, Created: "2026-10-08T10:00:00.000+0000"})
-					}
-				}
 				w.WriteHeader(204)
 				return
 			}

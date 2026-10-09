@@ -207,10 +207,16 @@ func (s *Service) PlanTransition(ctx context.Context, key, target, comment strin
 		Key:         issue.Key,
 		Description: desc,
 		apply: func(ctx context.Context) (string, error) {
-			if err := s.jc.DoTransition(ctx, issue.Key, t.ID, doc); err != nil {
+			if err := s.jc.DoTransition(ctx, issue.Key, t.ID); err != nil {
 				return "", err
 			}
-			return fmt.Sprintf("%s is now %s.", issue.Key, t.To.Name), nil
+			if doc == nil {
+				return fmt.Sprintf("%s is now %s.", issue.Key, t.To.Name), nil
+			}
+			if _, err := s.jc.AddComment(ctx, issue.Key, doc); err != nil {
+				return "", fmt.Errorf("%s is now %s, but adding the comment failed: %w", issue.Key, t.To.Name, err)
+			}
+			return fmt.Sprintf("%s is now %s; comment added.", issue.Key, t.To.Name), nil
 		},
 	}, nil
 }
