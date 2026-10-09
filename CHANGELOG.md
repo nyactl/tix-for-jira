@@ -4,6 +4,10 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ## Unreleased
 
+## [0.1.0] - 2026-10-09
+
+First release, tested against Jira Cloud with a non-admin account.
+
 ### Added
 
 - MCP server with read tools and approval-gated write tools (comment, field update, transition, create, work log, link).
@@ -12,3 +16,5 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 - API token storage in the macOS Keychain with expiry warnings; `auth login --with-token` reads the token from stdin.
 - Markdown <-> Atlassian Document Format conversion with `@[label]` mentions.
 - Profiles (`--profile`, `TIX_JIRA_PROFILE`) to switch between sites; development builds require an explicit profile.
+
+[0.1.0]: https://github.com/nyactl/tix-jira/releases/tag/v0.1.0
