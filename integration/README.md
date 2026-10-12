@@ -28,6 +28,16 @@ These tests run tix-for-jira against a real Jira Cloud site. They create tickets
 
    The tests refuse the default profile, profiles that did not opt in, and any profile on the same site as the default profile, so they cannot reach a production site by mistake.
 
+### Optional: a company-managed project
+
+The default project templates of a new site are team-managed, which lack time tracking, affects versions and sprint boards on the edit screens. If the second account is a Jira administrator, one run sets up a company-managed Scrum project `CMP` with versions, components, a board, the needed screen fields and a ticket that belongs to the second account:
+
+```sh
+TIX_JIRA_PROFILE=test TIX_JIRA_IT_SETUP=1 go test -tags integration -count=1 -v -run TestSetupCompanyManagedProject ./integration/
+```
+
+It is safe to run again and prints the values for `TIX_JIRA_IT_PROJECT` and `TIX_JIRA_IT_OTHER`. Run the suite against both kinds of project before a release.
+
 ## Running
 
 ```sh
