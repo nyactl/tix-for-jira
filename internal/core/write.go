@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nyactl/tix-for-jira/internal/config"
 	"github.com/nyactl/tix-for-jira/internal/jira"
 )
 
@@ -615,4 +616,52 @@ func (s *Service) verifyLink(ctx context.Context, key, other, typeName string, o
 		}
 	}
 	return fmt.Sprintf("Linked %s %s %s (link not visible yet).", key, phrase, other), nil
+}
+
+// PlanTake prepares assigning an unassigned ticket to the user. In own mode
+// the ticket is outside the scope until then, so the plan names only its
+// key, type and status.
+func (s *Service) PlanTake(ctx context.Context, key string) (*Plan, error) {
+	k, err := jira.NormalizeKey(key)
+	if err != nil {
+		return nil, err
+	}
+	issue, err := s.jc.GetIssueFields(ctx, k, []string{"assignee", "summary", "status", "issuetype"})
+	if errors.Is(err, jira.ErrNotFound) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	switch a := issue.Fields.Assignee; {
+	case a != nil && a.AccountID == s.people.MeID():
+		return nil, fmt.Errorf("%s is already assigned to you", issue.Key)
+	case a != nil:
+		return nil, fmt.Errorf("%s is assigned to someone else; only unassigned tickets can be taken", issue.Key)
+	}
+	what := issue.Key
+	if s.Mode() == config.PrivacyOff {
+		what = headline(issue)
+	}
+	var details []string
+	if t := issue.Fields.IssueType; t != nil {
+		details = append(details, t.Name)
+	}
+	if st := issue.Fields.Status; st != nil {
+		details = append(details, st.Name)
+	}
+	if len(details) > 0 {
+		what += " (" + strings.Join(details, ", ") + ")"
+	}
+	return &Plan{
+		Kind:        Destructive,
+		Key:         issue.Key,
+		Description: fmt.Sprintf("Assign %s to you. It is unassigned now.", s.people.Text(what)),
+		apply: func(ctx context.Context) (string, error) {
+			if err := s.jc.AssignIssue(ctx, issue.Key, s.people.MeID()); err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("%s is now assigned to you.", issue.Key), nil
+		},
+	}, nil
 }

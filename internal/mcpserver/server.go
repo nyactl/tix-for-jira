@@ -340,4 +340,9 @@ func (s *server) registerWrites(srv *mcp.Server) {
 			p, err := s.svc.PlanLink(ctx, in.Key, in.Relation, in.Other)
 			return s.approveThenApply(ctx, req, "link_issues", in, p, err)
 		})
+	add(srv, "assign_to_me", "Assign an unassigned ticket to the user, which brings it into scope. Tickets assigned to someone else are refused. The user approves it first.", writeAnnotations(core.Destructive),
+		func(ctx context.Context, req *mcp.CallToolRequest, in keyInput) (*mcp.CallToolResult, any, error) {
+			p, err := s.svc.PlanTake(ctx, in.Key)
+			return s.approveThenApply(ctx, req, "assign_to_me", in, p, err)
+		})
 }

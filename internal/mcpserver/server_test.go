@@ -93,7 +93,7 @@ func toolMap(t *testing.T, h *harness) map[string]*mcp.Tool {
 	return m
 }
 
-var writeTools = []string{"add_comment", "create_issue", "link_issues", "log_work", "transition_issue", "update_fields"}
+var writeTools = []string{"add_comment", "assign_to_me", "create_issue", "link_issues", "log_work", "transition_issue", "update_fields"}
 
 func TestReadOnlyByDefault(t *testing.T) {
 	t.Parallel()
@@ -124,7 +124,7 @@ func TestWriteToolAnnotations(t *testing.T) {
 			t.Errorf("%s missing", name)
 			continue
 		}
-		wantDestructive := name == "update_fields" || name == "transition_issue"
+		wantDestructive := name == "update_fields" || name == "transition_issue" || name == "assign_to_me"
 		a := tool.Annotations
 		if a == nil || a.ReadOnlyHint || a.DestructiveHint == nil || *a.DestructiveHint != wantDestructive {
 			t.Errorf("%s annotations = %+v", name, a)

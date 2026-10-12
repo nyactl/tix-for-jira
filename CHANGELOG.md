@@ -12,6 +12,7 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 - Issue types match regardless of case, hyphens and spaces ("subtask" finds "Sub-task").
 - Original and remaining estimates can be changed (`--set "Original estimate=2h 30m"`, MCP `update_fields`).
 - More field types can be set: cascading selects (`--set "Region=Europe / Germany"`), URL fields (http and https only) and Team fields (by team name or ID). Atlassian Goals fields are not supported.
+- `tix take KEY` and MCP `assign_to_me` assign an unassigned ticket to you. Tickets assigned to someone else are refused, and before the change the plan shows only the key, type and status.
 
 ## [0.1.1] - 2026-10-09
 
