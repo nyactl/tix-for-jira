@@ -303,3 +303,63 @@ func Me(m *core.Me) string {
 func Plan(p *core.Plan) string {
 	return sanitize.String(p.Description)
 }
+
+func Boards(bs []core.BoardView) string {
+	if len(bs) == 0 {
+		return "No boards.\n"
+	}
+	var b strings.Builder
+	for _, bd := range bs {
+		where := ""
+		if bd.Project != "" {
+			where = ", project " + bd.Project
+		}
+		line(&b, "- %d: %s (%s%s)", bd.ID, bd.Name, bd.Type, where)
+	}
+	return done(&b)
+}
+
+func sprintLine(s core.SprintView) string {
+	out := fmt.Sprintf("%d: %s (%s", s.ID, s.Name, s.State)
+	if s.Start != "" || s.End != "" {
+		out += fmt.Sprintf(", %s to %s", or(s.Start, "?"), or(s.End, "?"))
+	}
+	return out + ")"
+}
+
+func Sprints(ss []core.SprintView) string {
+	if len(ss) == 0 {
+		return "No active or future sprints.\n"
+	}
+	var b strings.Builder
+	for _, s := range ss {
+		line(&b, "- %s", sprintLine(s))
+		if s.Goal != "" {
+			line(&b, "  Goal: %s", s.Goal)
+		}
+	}
+	return done(&b)
+}
+
+// BoardIssues renders the user's tickets in sprints or a backlog.
+func BoardIssues(groups []core.BoardIssues) string {
+	var b strings.Builder
+	for n, g := range groups {
+		if n > 0 {
+			line(&b, "")
+		}
+		if g.Sprint != nil {
+			line(&b, "# Sprint %s on %s", sprintLine(*g.Sprint), g.Board.Name)
+			if g.Sprint.Goal != "" {
+				line(&b, "\nGoal: %s", g.Sprint.Goal)
+			}
+		} else {
+			line(&b, "# Backlog of %s", g.Board.Name)
+		}
+		line(&b, "\n%d shown of %d tickets in total.\n", len(g.Issues), g.Total)
+		for _, i := range g.Issues {
+			line(&b, "%s", issueLine(i))
+		}
+	}
+	return done(&b)
+}
