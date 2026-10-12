@@ -122,3 +122,57 @@ func TestSprintsOnBoardWithoutSprints(t *testing.T) {
 		t.Errorf("err = %v", err)
 	}
 }
+
+func TestPlanMoveSprint(t *testing.T) {
+	t.Parallel()
+	f := agileFixture(t)
+	s := service(t, f, config.PrivacyOwn)
+	ctx := context.Background()
+
+	p, err := s.PlanMoveSprint(ctx, "PROJ-1", "sprint 2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Kind != Destructive || !strings.Contains(p.Description, "from sprint Sprint 1 to sprint Sprint 2 (future)") {
+		t.Errorf("description = %q", p.Description)
+	}
+	assertNoPersonalData(t, p.Description)
+	if _, err := p.Apply(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if f.Issues["PROJ-1"].Sprint != 12 {
+		t.Errorf("sprint = %d", f.Issues["PROJ-1"].Sprint)
+	}
+
+	p, err = s.PlanMoveSprint(ctx, "PROJ-1", "Backlog")
+	if err != nil || !strings.Contains(p.Description, "from sprint Sprint 2 to the backlog") {
+		t.Fatalf("to backlog: %+v, %v", p, err)
+	}
+	if _, err := p.Apply(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if f.Issues["PROJ-1"].Sprint != 0 {
+		t.Errorf("sprint after backlog = %d", f.Issues["PROJ-1"].Sprint)
+	}
+
+	p, err = s.PlanMoveSprint(ctx, "PROJ-1", "11")
+	if err != nil || !strings.Contains(p.Description, "from the backlog to sprint Sprint 1 (active)") {
+		t.Fatalf("by ID: %+v, %v", p, err)
+	}
+
+	for _, tc := range []struct{ key, target, want string }{
+		{"PROJ-1", "backlog", "already in the backlog"},
+		{"PROJ-1", "10", "is closed"},
+		{"PROJ-1", "Sprint 0", "choose one of: Sprint 1, Sprint 2"},
+		{"PROJ-1", "", "name a sprint"},
+		{"PROJ-2", "Sprint 1", ErrNotFound.Error()},
+	} {
+		if _, err := s.PlanMoveSprint(ctx, tc.key, tc.target); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s -> %q: err = %v, want %q", tc.key, tc.target, err, tc.want)
+		}
+	}
+	f.Issues["PROJ-1"].Sprint = 11
+	if _, err := s.PlanMoveSprint(ctx, "PROJ-1", "Sprint 1"); err == nil || !strings.Contains(err.Error(), "already in sprint") {
+		t.Errorf("same sprint: %v", err)
+	}
+}

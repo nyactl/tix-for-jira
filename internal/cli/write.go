@@ -235,3 +235,19 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 		watchCmd("watch", "Watch a ticket to get its notifications", true),
 		watchCmd("unwatch", "Stop watching a ticket", false))
 }
+
+func (a *App) sprintMoveCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "move <key> <sprint|backlog>",
+		Short: `Move a ticket into an active or future sprint (ID or name), or to the backlog`,
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, _, err := a.service(cmd)
+			if err != nil {
+				return err
+			}
+			p, err := svc.PlanMoveSprint(cmd.Context(), args[0], args[1])
+			return a.apply(cmd, svc, p, err)
+		},
+	}
+}

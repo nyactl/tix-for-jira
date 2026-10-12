@@ -612,6 +612,70 @@ func TestIntegration(t *testing.T) {
 		}
 	})
 
+	t.Run("move between sprints and the backlog", func(t *testing.T) {
+		bs, err := s.svc.Boards(ctx, s.project)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var ss []core.SprintView
+		board := ""
+		for _, bd := range bs {
+			if bd.Type == "scrum" {
+				board = strconv.Itoa(bd.ID)
+				if ss, err = s.svc.Sprints(ctx, board); err != nil {
+					t.Fatal(err)
+				}
+				break
+			}
+		}
+		var active, future *core.SprintView
+		for i := range ss {
+			switch {
+			case ss[i].State == "active" && active == nil:
+				active = &ss[i]
+			case ss[i].State == "future" && future == nil:
+				future = &ss[i]
+			}
+		}
+		if active == nil || future == nil {
+			t.Skip("needs a scrum board with an active and a future sprint; run TestSetupCompanyManagedProject")
+		}
+		inSprint := func(want *core.SprintView) bool {
+			gs, err := s.svc.ActiveSprints(ctx, board, 200)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, g := range gs {
+				for _, i := range g.Issues {
+					if i.Key == b && g.Sprint.ID == want.ID {
+						return true
+					}
+				}
+			}
+			return false
+		}
+		applied(t)(s.svc.PlanMoveSprint(ctx, b, active.Name))
+		if !inSprint(active) {
+			t.Errorf("%s is not in the active sprint %s", b, active.Name)
+		}
+		applied(t)(s.svc.PlanMoveSprint(ctx, b, strconv.Itoa(future.ID)))
+		if _, err := s.svc.PlanMoveSprint(ctx, b, strconv.Itoa(future.ID)); err == nil || !strings.Contains(err.Error(), "already in sprint") {
+			t.Errorf("moving into the same sprint again: %v", err)
+		}
+		applied(t)(s.svc.PlanMoveSprint(ctx, b, "backlog"))
+		bl, err := s.svc.Backlog(ctx, board, 200)
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for _, i := range bl.Issues {
+			found = found || i.Key == b
+		}
+		if !found {
+			t.Errorf("%s is not back in the backlog", b)
+		}
+	})
+
 	t.Run("worklog with start time", func(t *testing.T) {
 		start := time.Now().Add(-2 * time.Hour).Format("2006-01-02 15:04")
 		applied(t)(s.svc.PlanWorklog(ctx, a, "30m", start, ""))

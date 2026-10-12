@@ -186,7 +186,7 @@ func (a *App) addReadCommands(root *cobra.Command) {
 		}
 		return a.print(cmd, ss, func() string { return render.Sprints(ss) })
 	})
-	sprint.AddCommand(sprintShow, sprintList)
+	sprint.AddCommand(sprintShow, sprintList, a.sprintMoveCmd())
 
 	backlog := keyCmd(a, "backlog <board>", "Show your tickets in the backlog of a board (ID or name)", func(cmd *cobra.Command, svc *core.Service, board string) error {
 		max, _ := cmd.Flags().GetInt("max")

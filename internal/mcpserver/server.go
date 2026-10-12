@@ -121,6 +121,11 @@ type projectInput struct {
 	Project string `json:"project" jsonschema:"Project key"`
 }
 
+type sprintMoveInput struct {
+	Key    string `json:"key" jsonschema:"Ticket key, e.g. PROJ-123"`
+	Sprint string `json:"sprint" jsonschema:"Sprint ID or name (see list_sprints), or backlog"`
+}
+
 type boardsInput struct {
 	Project string `json:"project,omitempty" jsonschema:"Optional project key"`
 }
@@ -395,5 +400,10 @@ func (s *server) registerWrites(srv *mcp.Server) {
 		func(ctx context.Context, req *mcp.CallToolRequest, in keyInput) (*mcp.CallToolResult, any, error) {
 			p, err := s.svc.PlanWatch(ctx, in.Key, false)
 			return s.approveThenApply(ctx, req, "unwatch_issue", in, p, err)
+		})
+	add(srv, "move_to_sprint", "Move a ticket into an active or future sprint, or to the backlog. The user approves it first.", writeAnnotations(core.Destructive),
+		func(ctx context.Context, req *mcp.CallToolRequest, in sprintMoveInput) (*mcp.CallToolResult, any, error) {
+			p, err := s.svc.PlanMoveSprint(ctx, in.Key, in.Sprint)
+			return s.approveThenApply(ctx, req, "move_to_sprint", in, p, err)
 		})
 }
