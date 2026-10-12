@@ -179,3 +179,113 @@ func limit(max int) int {
 	}
 	return min(max, 200)
 }
+
+// PlanMoveSprint prepares moving a ticket into an active or future sprint
+// (ID or name, searched on the boards of the ticket's project) or, with
+// target "backlog", out of its sprint.
+func (s *Service) PlanMoveSprint(ctx context.Context, key, target string) (*Plan, error) {
+	issue, err := s.scoped(ctx, key, "project")
+	if err != nil {
+		return nil, err
+	}
+	current, err := s.jc.IssueSprint(ctx, issue.Key)
+	if err != nil {
+		return nil, err
+	}
+	from := "the backlog"
+	if current != nil {
+		from = "sprint " + s.people.Text(current.Name)
+	}
+	target = strings.TrimSpace(target)
+	if strings.EqualFold(target, "backlog") {
+		if current == nil {
+			return nil, fmt.Errorf("%s is already in the backlog", issue.Key)
+		}
+		return &Plan{
+			Kind:        Destructive,
+			Key:         issue.Key,
+			Description: fmt.Sprintf("Move %s from %s to the backlog.", s.people.Text(headline(issue)), from),
+			apply: func(ctx context.Context) (string, error) {
+				if err := s.jc.MoveToBacklog(ctx, issue.Key); err != nil {
+					return "", err
+				}
+				return fmt.Sprintf("Moved %s to the backlog.", issue.Key), nil
+			},
+		}, nil
+	}
+	sp, err := s.targetSprint(ctx, issue, target)
+	if err != nil {
+		return nil, err
+	}
+	if current != nil && current.ID == sp.ID {
+		return nil, fmt.Errorf("%s is already in sprint %s", issue.Key, s.people.Text(sp.Name))
+	}
+	to := s.people.Text(sp.Name)
+	return &Plan{
+		Kind:        Destructive,
+		Key:         issue.Key,
+		Description: fmt.Sprintf("Move %s from %s to sprint %s (%s).", s.people.Text(headline(issue)), from, to, sp.State),
+		apply: func(ctx context.Context) (string, error) {
+			if err := s.jc.MoveToSprint(ctx, sp.ID, issue.Key); err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("Moved %s to sprint %s.", issue.Key, to), nil
+		},
+	}, nil
+}
+
+func (s *Service) targetSprint(ctx context.Context, issue *jira.Issue, ref string) (*jira.Sprint, error) {
+	if ref == "" {
+		return nil, errors.New(`name a sprint (ID or name, see tix sprint list) or "backlog"`)
+	}
+	open := func(sp *jira.Sprint) (*jira.Sprint, error) {
+		if sp.State != "active" && sp.State != "future" {
+			return nil, fmt.Errorf("sprint %s is %s; only active and future sprints take tickets", s.people.Text(sp.Name), sp.State)
+		}
+		return sp, nil
+	}
+	if id, err := strconv.Atoi(ref); err == nil && id > 0 {
+		sp, err := s.jc.Sprint(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		return open(sp)
+	}
+	project := ""
+	if issue.Fields.Project != nil {
+		project = issue.Fields.Project.Key
+	}
+	bs, err := s.jc.Boards(ctx, project, maxBoards)
+	if err != nil {
+		return nil, err
+	}
+	seen := map[int]bool{}
+	var matches []jira.Sprint
+	var names []string
+	for i := range bs {
+		sps, err := s.sprints(ctx, &bs[i], "active,future")
+		if err != nil {
+			continue
+		}
+		for _, sp := range sps {
+			if seen[sp.ID] {
+				continue
+			}
+			seen[sp.ID] = true
+			names = append(names, s.people.Text(sp.Name))
+			if strings.EqualFold(sp.Name, ref) {
+				matches = append(matches, sp)
+			}
+		}
+	}
+	switch len(matches) {
+	case 1:
+		return &matches[0], nil
+	case 0:
+		if len(names) == 0 {
+			return nil, fmt.Errorf("no active or future sprints on the boards of %s", project)
+		}
+		return nil, fmt.Errorf("no open sprint named %q; choose one of: %s", ref, strings.Join(names, ", "))
+	}
+	return nil, fmt.Errorf("several sprints are named %q; use the sprint ID (see tix sprint list)", ref)
+}

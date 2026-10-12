@@ -278,7 +278,7 @@ func (f *Fake) serve(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	p := r.URL.Path
-	if f.agile(w, r, me) {
+	if f.agile(w, r, me, body) {
 		return
 	}
 	switch {

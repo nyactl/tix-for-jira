@@ -102,3 +102,36 @@ func (c *Client) agileIssues(ctx context.Context, path, jql string, fields []str
 	issues, err := startAtPages(ctx, c, path, q, limit, decode)
 	return issues, total, err
 }
+
+func (c *Client) Sprint(ctx context.Context, id int) (*Sprint, error) {
+	var sp Sprint
+	if err := c.do(ctx, http.MethodGet, "/rest/agile/1.0/sprint/"+strconv.Itoa(id), nil, nil, &sp); err != nil {
+		return nil, err
+	}
+	return &sp, nil
+}
+
+// IssueSprint returns the open sprint an issue is in, or nil in the backlog.
+func (c *Client) IssueSprint(ctx context.Context, key string) (*Sprint, error) {
+	k, err := NormalizeKey(key)
+	if err != nil {
+		return nil, err
+	}
+	var out struct {
+		Fields struct {
+			Sprint *Sprint `json:"sprint"`
+		} `json:"fields"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/rest/agile/1.0/issue/"+k, url.Values{"fields": {"sprint"}}, nil, &out); err != nil {
+		return nil, err
+	}
+	return out.Fields.Sprint, nil
+}
+
+func (c *Client) MoveToSprint(ctx context.Context, sprintID int, keys ...string) error {
+	return c.do(ctx, http.MethodPost, "/rest/agile/1.0/sprint/"+strconv.Itoa(sprintID)+"/issue", nil, map[string][]string{"issues": keys}, nil)
+}
+
+func (c *Client) MoveToBacklog(ctx context.Context, keys ...string) error {
+	return c.do(ctx, http.MethodPost, "/rest/agile/1.0/backlog/issue", nil, map[string][]string{"issues": keys}, nil)
+}

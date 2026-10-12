@@ -15,6 +15,7 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 - `tix take KEY` and MCP `assign_to_me` assign an unassigned ticket to you. Tickets assigned to someone else are refused, and before the change the plan shows only the key, type and status.
 - `tix watch` / `tix unwatch` and MCP `watch_issue` / `unwatch_issue`. Ticket details show the number of watchers and whether you are one of them, never who the others are.
 - Boards and sprints: `tix boards`, `tix sprint list|show <board>`, `tix backlog <board>` and the MCP tools `list_boards`, `list_sprints`, `get_active_sprint`, `get_backlog`. In privacy mode `own` they show only your tickets plus the total number of tickets.
+- `tix sprint move KEY SPRINT|backlog` and MCP `move_to_sprint` move one of your tickets into an active or future sprint (by ID or name) or back to the backlog.
 
 ## [0.1.1] - 2026-10-09
 
