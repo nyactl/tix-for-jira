@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/nyactl/approvekit/atlassian"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -16,10 +17,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nyactl/approvekit/keychain"
 	"github.com/nyactl/tix-for-jira/internal/config"
 	"github.com/nyactl/tix-for-jira/internal/core"
 	"github.com/nyactl/tix-for-jira/internal/jira"
-	"github.com/nyactl/tix-for-jira/internal/secret"
 )
 
 type site struct {
@@ -68,7 +69,7 @@ func setup(t *testing.T) *site {
 	if cfg.Privacy != config.PrivacyOwn {
 		t.Fatal("the test site config must use privacy mode own")
 	}
-	token, err := secret.NewKeychain().Get(secret.AccountKey(cfg.Site, cfg.Email))
+	token, err := keychain.New("tix-for-jira").Get(keychain.AccountKey(cfg.Site, cfg.Email))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,9 +112,9 @@ func testSiteConfig(t *testing.T, profile string) *config.Config {
 // newClient talks to the test site as the profile's account, through the
 // API gateway when the profile uses a scoped token.
 func newClient(cfg *config.Config, token string) *jira.Client {
-	var opts []jira.Option
+	var opts []atlassian.Option
 	if cfg.ScopedToken {
-		opts = append(opts, jira.WithGateway(jira.Gateway, cfg.CloudID))
+		opts = append(opts, atlassian.WithGateway(atlassian.Gateway, cfg.CloudID))
 	}
 	return jira.New(cfg.Site, cfg.Email, token, "integration", opts...)
 }

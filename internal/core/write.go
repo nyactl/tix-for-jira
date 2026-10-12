@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/nyactl/approvekit/atlassian"
 	"io"
 	"math"
 	"os"
@@ -102,7 +103,7 @@ func (s *Service) PlanUpdate(ctx context.Context, key string, changes []FieldInp
 		return nil, err
 	}
 	issue, err := s.jc.GetIssue(ctx, k)
-	if errors.Is(err, jira.ErrNotFound) || (err == nil && !s.people.InScope(issue.Fields.Assignee)) {
+	if errors.Is(err, atlassian.ErrNotFound) || (err == nil && !s.visible(issue.Fields.Assignee)) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
@@ -631,7 +632,7 @@ func (s *Service) PlanTake(ctx context.Context, key string) (*Plan, error) {
 		return nil, err
 	}
 	issue, err := s.jc.GetIssueFields(ctx, k, []string{"assignee", "summary", "status", "issuetype"})
-	if errors.Is(err, jira.ErrNotFound) {
+	if errors.Is(err, atlassian.ErrNotFound) {
 		return nil, ErrNotFound
 	}
 	if err != nil {

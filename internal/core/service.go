@@ -10,10 +10,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/nyactl/approvekit/atlassian"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/nyactl/approvekit/people"
 	adf "github.com/nyactl/go-adf"
 	"github.com/nyactl/tix-for-jira/internal/config"
 	"github.com/nyactl/tix-for-jira/internal/jira"
@@ -27,7 +29,7 @@ var ErrNotFound = errors.New("ticket not found, not visible to you, or outside y
 // Service runs operations for one user.
 type Service struct {
 	jc     *jira.Client
-	people *privacy.People
+	people *people.People
 	now    func() time.Time
 
 	fieldsMu sync.Mutex
@@ -40,11 +42,29 @@ func New(ctx context.Context, jc *jira.Client, mode config.PrivacyMode) (*Servic
 	if err != nil {
 		return nil, err
 	}
-	return &Service{jc: jc, people: privacy.NewPeople(mode, me), now: time.Now}, nil
+	return &Service{jc: jc, people: people.New(people.Mode(mode), person(me)), now: time.Now}, nil
 }
 
 // Mode returns the privacy mode.
-func (s *Service) Mode() config.PrivacyMode { return s.people.Mode() }
+func (s *Service) Mode() config.PrivacyMode { return config.PrivacyMode(s.people.Mode()) }
+
+func person(u *jira.User) people.Person {
+	return people.Person{AccountID: u.AccountID, DisplayName: u.DisplayName, Email: u.EmailAddress}
+}
+
+// user returns the label for a Jira user, or "" for nil.
+func (s *Service) user(u *jira.User) string {
+	if u == nil {
+		return ""
+	}
+	p := person(u)
+	return s.people.Person(&p)
+}
+
+// visible reports whether an issue with this assignee may be shown.
+func (s *Service) visible(assignee *jira.User) bool {
+	return privacy.InScope(s.people, assignee)
+}
 
 // Site returns the Jira site URL.
 func (s *Service) Site() string { return s.jc.Site() }
@@ -59,13 +79,13 @@ func (s *Service) scoped(ctx context.Context, key string, fields ...string) (*ji
 		return nil, err
 	}
 	issue, err := s.jc.GetIssueFields(ctx, k, append([]string{"assignee", "reporter", "summary", "status", "issuetype"}, fields...))
-	if errors.Is(err, jira.ErrNotFound) {
+	if errors.Is(err, atlassian.ErrNotFound) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
-	if !s.people.InScope(issue.Fields.Assignee) {
+	if !s.visible(issue.Fields.Assignee) {
 		return nil, ErrNotFound
 	}
 	s.learn(issue)
@@ -76,10 +96,10 @@ func (s *Service) scoped(ctx context.Context, key string, fields ...string) (*ji
 // any free text of the issue is redacted.
 func (s *Service) learn(issue *jira.Issue) {
 	f := issue.Fields
-	s.people.User(f.Assignee)
-	s.people.User(f.Reporter)
+	s.user(f.Assignee)
+	s.user(f.Reporter)
 	for _, a := range f.Attachments {
-		s.people.User(a.Author)
+		s.user(a.Author)
 	}
 	for id, raw := range issue.Raw {
 		if !strings.HasPrefix(id, "customfield_") {
@@ -89,11 +109,11 @@ func (s *Service) learn(issue *jira.Issue) {
 		var one jira.User
 		switch {
 		case json.Unmarshal(raw, &one) == nil && one.AccountID != "":
-			s.people.User(&one)
+			s.user(&one)
 		case json.Unmarshal(raw, &users) == nil:
 			for i := range users {
 				if users[i].AccountID != "" {
-					s.people.User(&users[i])
+					s.user(&users[i])
 				}
 			}
 		}

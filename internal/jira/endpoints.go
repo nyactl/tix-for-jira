@@ -1,19 +1,19 @@
 package jira
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"mime/multipart"
 	"net/http"
 	"net/url"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/nyactl/approvekit/atlassian"
 )
 
 // Myself returns the authenticated user.
@@ -434,20 +434,12 @@ func (c *Client) AddAttachment(ctx context.Context, key, filename string, data [
 	if err != nil {
 		return nil, err
 	}
-	var buf bytes.Buffer
-	w := multipart.NewWriter(&buf)
-	part, err := w.CreateFormFile("file", filename)
+	body, err := atlassian.Multipart("file", filename, data)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := part.Write(data); err != nil {
-		return nil, err
-	}
-	if err := w.Close(); err != nil {
-		return nil, err
-	}
 	var out []Attachment
-	if err := c.do(ctx, http.MethodPost, p, nil, rawBody{buf.Bytes(), w.FormDataContentType()}, &out); err != nil {
+	if err := c.do(ctx, http.MethodPost, p, nil, body, &out); err != nil {
 		return nil, err
 	}
 	if len(out) == 0 {

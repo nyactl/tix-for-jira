@@ -5,14 +5,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/nyactl/approvekit/atlassian"
 	"io"
 	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/nyactl/approvekit/keychain"
+	"github.com/nyactl/approvekit/profile"
 	"github.com/nyactl/tix-for-jira/internal/config"
 	"github.com/nyactl/tix-for-jira/internal/jira"
-	"github.com/nyactl/tix-for-jira/internal/secret"
 )
 
 func (a *App) authCmd() *cobra.Command {
@@ -35,7 +37,7 @@ func (a *App) authCmd() *cobra.Command {
 			prev, _ := config.Load(prof)
 			// A development build may create a new profile, but must not log in to
 			// the default profile or to an existing profile that did not opt in.
-			if !isRelease(a.Version) && (prof == config.DefaultProfile || prev != nil) {
+			if !profile.IsRelease(a.Version) && (prof == config.DefaultProfile || prev != nil) {
 				if err := a.checkDevBuild(prof, prev); err != nil {
 					return err
 				}
@@ -45,7 +47,7 @@ func (a *App) authCmd() *cobra.Command {
 					return err
 				}
 			}
-			if site, err = config.NormalizeSite(site); err != nil {
+			if site, err = profile.NormalizeSite(site); err != nil {
 				return err
 			}
 			if email == "" {
@@ -76,8 +78,8 @@ func (a *App) authCmd() *cobra.Command {
 					return err
 				}
 			}
-			cfg := &config.Config{Site: site, Email: email, Privacy: config.PrivacyOwn, TokenExpiry: strings.TrimSpace(expires),
-				ScopedToken: cloudID != "", CloudID: cloudID}
+			cfg := &config.Config{Account: profile.Account{Site: site, Email: email, TokenExpiry: strings.TrimSpace(expires),
+				ScopedToken: cloudID != "", CloudID: cloudID}, Privacy: config.PrivacyOwn}
 			if prev != nil {
 				cfg.Privacy = prev.Privacy
 				cfg.AllowDevBuilds = prev.AllowDevBuilds && prev.Site == cfg.Site
@@ -85,11 +87,11 @@ func (a *App) authCmd() *cobra.Command {
 			if err := cfg.Validate(); err != nil {
 				return err
 			}
-			if err := a.Secrets.Set(secret.AccountKey(cfg.Site, cfg.Email), token); err != nil {
+			if err := a.Secrets.Set(keychain.AccountKey(cfg.Site, cfg.Email), token); err != nil {
 				return err
 			}
 			if prev != nil && (prev.Site != cfg.Site || prev.Email != cfg.Email) {
-				_ = a.Secrets.Delete(secret.AccountKey(prev.Site, prev.Email))
+				_ = a.Secrets.Delete(keychain.AccountKey(prev.Site, prev.Email))
 			}
 			if err := cfg.Save(prof); err != nil {
 				return err
@@ -146,7 +148,7 @@ func (a *App) authCmd() *cobra.Command {
 			if err := confirm(a.TTY, fmt.Sprintf("Remove the API token for %s on %s (profile %s) from the Keychain?", cfg.Email, cfg.Site, prof), "", false); err != nil {
 				return err
 			}
-			if err := a.Secrets.Delete(secret.AccountKey(cfg.Site, cfg.Email)); err != nil {
+			if err := a.Secrets.Delete(keychain.AccountKey(cfg.Site, cfg.Email)); err != nil {
 				return err
 			}
 			_, err = fmt.Fprintln(a.Out, "Token removed. Revoke it at https://id.atlassian.com/manage-profile/security/api-tokens if you no longer need it.")
@@ -164,11 +166,11 @@ var errLoginRejected = errors.New("this email and API token were not accepted by
 // stored at that point.
 func loginError(site, email string, err error) error {
 	switch {
-	case errors.Is(err, jira.ErrUnauthorized):
+	case errors.Is(err, atlassian.ErrUnauthorized):
 		return fmt.Errorf("%w on %s; nothing was saved. Check that you pasted the API token itself (not your password), "+
 			"that it was created for the Atlassian account %s, and that it has not expired or been revoked: "+
 			"https://id.atlassian.com/manage-profile/security/api-tokens", errLoginRejected, site, email)
-	case errors.Is(err, jira.ErrNotFound):
+	case errors.Is(err, atlassian.ErrNotFound):
 		return fmt.Errorf("%s does not look like a Jira Cloud site (no REST API found); nothing was saved", site)
 	}
 	return fmt.Errorf("could not check the credentials with %s; nothing was saved: %w", site, err)
@@ -335,7 +337,7 @@ func orDash(s string) string {
 // empty for a classic token.
 func (a *App) verifyToken(ctx context.Context, site, email, token string) (*jira.User, string, error) {
 	me, err := a.client(site, email, token, "").Myself(ctx)
-	if !errors.Is(err, jira.ErrUnauthorized) {
+	if !errors.Is(err, atlassian.ErrUnauthorized) {
 		return me, "", err
 	}
 	siteErr := err
@@ -345,7 +347,7 @@ func (a *App) verifyToken(ctx context.Context, site, email, token string) (*jira
 	}
 	me, err = a.client(site, email, token, cloudID).Myself(ctx)
 	switch {
-	case errors.Is(err, jira.ErrMissingScope):
+	case errors.Is(err, atlassian.ErrMissingScope):
 		return nil, "", fmt.Errorf("the scoped token is valid but lacks read:jira-user, which tix needs to identify you: %w", err)
 	case err != nil:
 		return nil, "", siteErr

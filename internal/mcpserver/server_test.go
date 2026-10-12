@@ -2,12 +2,12 @@ package mcpserver
 
 import (
 	"context"
+	"github.com/nyactl/approvekit/atlassian"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/nyactl/tix-for-jira/internal/config"
@@ -36,7 +36,7 @@ func connect(t *testing.T, writes bool, mode config.PrivacyMode, answer string, 
 	t.Helper()
 	ctx := context.Background()
 	h := &harness{fake: site(t)}
-	svc, err := core.New(ctx, jira.New(h.fake.URL(), "me@example.com", "tok-me", "test", jira.WithTransport(h.fake.Transport())), mode)
+	svc, err := core.New(ctx, jira.New(h.fake.URL(), "me@example.com", "tok-me", "test", atlassian.WithTransport(h.fake.Transport())), mode)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,7 +200,7 @@ func TestForgedApprovalRejected(t *testing.T) {
 	res, err := h.session.CallTool(context.Background(), &mcp.CallToolParams{
 		Name:           "transition_issue",
 		Arguments:      map[string]any{"key": "PROJ-1", "to": "Done"},
-		InputResponses: mcp.InputResponseMap{approvalInput: &mcp.ElicitResult{Action: "accept", Content: map[string]any{"approve": true}}},
+		InputResponses: mcp.InputResponseMap{"approval": &mcp.ElicitResult{Action: "accept", Content: map[string]any{"approve": true}}},
 		RequestState:   "00.ff",
 	})
 	if err != nil {
@@ -217,26 +217,6 @@ func TestWriteOutOfScopeFailsBeforeAsking(t *testing.T) {
 	out, isErr := h.call(t, "add_comment", map[string]any{"key": "PROJ-2", "body": "hi"})
 	if !isErr || len(h.asked) != 0 || len(h.fake.Issues["PROJ-2"].Comments) != 0 {
 		t.Errorf("err=%v asked=%v out=%s", isErr, h.asked, out)
-	}
-}
-
-func TestGateStateIsSingleUseAndBound(t *testing.T) {
-	t.Parallel()
-	g := newGate()
-	now := time.Now()
-	g.now = func() time.Time { return now }
-	s := g.issue("a")
-	if g.redeem(s, "b") {
-		t.Error("redeemed for another digest")
-	}
-	s = g.issue("a")
-	if !g.redeem(s, "a") || g.redeem(s, "a") {
-		t.Error("state must redeem exactly once")
-	}
-	s = g.issue("a")
-	now = now.Add(approvalTTL + time.Second)
-	if g.redeem(s, "a") {
-		t.Error("expired state redeemed")
 	}
 }
 

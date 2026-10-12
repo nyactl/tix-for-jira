@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -20,7 +19,6 @@ func newTestClient(t *testing.T, h http.Handler) *Client {
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
 	c := New(srv.URL, "me@example.com", "secret", "test")
-	c.sleep = func(context.Context, time.Duration) error { return nil }
 	return c
 }
 
@@ -101,92 +99,6 @@ func TestGetIssueKeepsRawFieldsAndNames(t *testing.T) {
 	}
 	if string(issue.Raw["customfield_10016"]) != "5" || issue.Names["customfield_10016"] != "Story Points" {
 		t.Errorf("raw = %v names = %v", issue.Raw, issue.Names)
-	}
-}
-
-func TestErrorMapping(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		status int
-		body   string
-		check  func(error) bool
-		desc   string
-	}{
-		{401, ``, func(err error) bool { return errors.Is(err, ErrUnauthorized) }, "unauthorized"},
-		{404, `{"errorMessages":["Issue does not exist"]}`, func(err error) bool { return errors.Is(err, ErrNotFound) }, "not found"},
-		{403, `{"errorMessages":["You do not have permission"]}`, func(err error) bool {
-			return strings.Contains(err.Error(), "permission denied by Jira: You do not have permission")
-		}, "forbidden"},
-		{400, `{"errorMessages":["bad"],"errors":{"summary":"required","labels":"invalid"}}`, func(err error) bool {
-			var apiErr *APIError
-			return errors.As(err, &apiErr) && err.Error() == "Jira returned HTTP 400: bad; labels: invalid; summary: required"
-		}, "bad request with field errors"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.desc, func(t *testing.T) {
-			t.Parallel()
-			c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(tt.status)
-				_, _ = io.WriteString(w, tt.body)
-			}))
-			_, err := c.Myself(context.Background())
-			if err == nil || !tt.check(err) {
-				t.Errorf("err = %v", err)
-			}
-		})
-	}
-}
-
-func TestRetriesRateLimit(t *testing.T) {
-	t.Parallel()
-	var calls atomic.Int32
-	var waited []time.Duration
-	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if calls.Add(1) < 3 {
-			w.Header().Set("Retry-After", "2")
-			w.WriteHeader(http.StatusTooManyRequests)
-			return
-		}
-		writeJSON(w, 200, User{AccountID: "acc-me"})
-	}))
-	c.sleep = func(_ context.Context, d time.Duration) error { waited = append(waited, d); return nil }
-	if _, err := c.Myself(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if calls.Load() != 3 || len(waited) != 2 || waited[0] != 2*time.Second {
-		t.Errorf("calls = %d waited = %v", calls.Load(), waited)
-	}
-}
-
-func TestGivesUpAfterRetries(t *testing.T) {
-	t.Parallel()
-	var calls atomic.Int32
-	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls.Add(1)
-		w.WriteHeader(http.StatusServiceUnavailable)
-	}))
-	if _, err := c.Myself(context.Background()); err == nil {
-		t.Fatal("expected error")
-	}
-	if calls.Load() != maxRetries+1 {
-		t.Errorf("calls = %d", calls.Load())
-	}
-}
-
-func TestRefusesCrossHostRedirect(t *testing.T) {
-	t.Parallel()
-	var leaked atomic.Bool
-	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { leaked.Store(true) }))
-	t.Cleanup(other.Close)
-	c := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, strings.Replace(other.URL, "127.0.0.1", "localhost", 1), http.StatusFound)
-	}))
-	_, err := c.Myself(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "refusing redirect") {
-		t.Errorf("err = %v", err)
-	}
-	if leaked.Load() {
-		t.Error("request reached the other host")
 	}
 }
 
