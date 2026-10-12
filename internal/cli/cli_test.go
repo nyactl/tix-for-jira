@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"github.com/nyactl/approvekit/atlassian"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/nyactl/approvekit/atlassian"
 	"github.com/nyactl/approvekit/keychain"
 	"github.com/nyactl/approvekit/profile"
 	"github.com/nyactl/tix-for-jira/internal/config"

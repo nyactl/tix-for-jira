@@ -8,7 +8,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/nyactl/approvekit/atlassian"
 	"io"
 	"net/http"
 	"os"
@@ -16,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nyactl/approvekit/atlassian"
 	"github.com/nyactl/approvekit/keychain"
 	"github.com/nyactl/tix-for-jira/internal/config"
 	"github.com/nyactl/tix-for-jira/internal/jira"

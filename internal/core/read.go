@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/nyactl/approvekit/atlassian"
 	"os"
 	"path"
 	"path/filepath"
@@ -16,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nyactl/approvekit/atlassian"
 	"github.com/nyactl/approvekit/people"
 	"github.com/nyactl/approvekit/sanitize"
 	"github.com/nyactl/tix-for-jira/internal/jira"

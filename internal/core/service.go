@@ -10,11 +10,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/nyactl/approvekit/atlassian"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/nyactl/approvekit/atlassian"
 	"github.com/nyactl/approvekit/people"
 	adf "github.com/nyactl/go-adf"
 	"github.com/nyactl/tix-for-jira/internal/config"

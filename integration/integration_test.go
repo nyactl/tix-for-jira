@@ -9,7 +9,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/nyactl/approvekit/atlassian"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -17,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nyactl/approvekit/atlassian"
 	"github.com/nyactl/approvekit/keychain"
 	"github.com/nyactl/tix-for-jira/internal/config"
 	"github.com/nyactl/tix-for-jira/internal/core"

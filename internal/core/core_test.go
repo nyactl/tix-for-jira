@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/nyactl/approvekit/atlassian"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -13,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nyactl/approvekit/atlassian"
 	"github.com/nyactl/tix-for-jira/internal/config"
 	"github.com/nyactl/tix-for-jira/internal/jira"
 	"github.com/nyactl/tix-for-jira/internal/jiratest"
