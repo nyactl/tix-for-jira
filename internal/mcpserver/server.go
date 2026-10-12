@@ -3,7 +3,9 @@ package mcpserver
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -119,6 +121,11 @@ type attachmentInput struct {
 
 type projectInput struct {
 	Project string `json:"project" jsonschema:"Project key"`
+}
+
+type attachInput struct {
+	Key  string `json:"key" jsonschema:"Ticket key, e.g. PROJ-123"`
+	Path string `json:"path" jsonschema:"Absolute path of a local file the user named; hidden files and folders are refused"`
 }
 
 type sprintMoveInput struct {
@@ -401,9 +408,38 @@ func (s *server) registerWrites(srv *mcp.Server) {
 			p, err := s.svc.PlanWatch(ctx, in.Key, false)
 			return s.approveThenApply(ctx, req, "unwatch_issue", in, p, err)
 		})
+	add(srv, "attach_file", "Upload a local file the user named to a ticket. The user approves the file name, size and path first.", writeAnnotations(core.Additive),
+		func(ctx context.Context, req *mcp.CallToolRequest, in attachInput) (*mcp.CallToolResult, any, error) {
+			if err := checkUploadPath(in.Path); err != nil {
+				return nil, nil, err
+			}
+			p, err := s.svc.PlanAttach(ctx, in.Key, in.Path)
+			return s.approveThenApply(ctx, req, "attach_file", in, p, err)
+		})
 	add(srv, "move_to_sprint", "Move a ticket into an active or future sprint, or to the backlog. The user approves it first.", writeAnnotations(core.Destructive),
 		func(ctx context.Context, req *mcp.CallToolRequest, in sprintMoveInput) (*mcp.CallToolResult, any, error) {
 			p, err := s.svc.PlanMoveSprint(ctx, in.Key, in.Sprint)
 			return s.approveThenApply(ctx, req, "move_to_sprint", in, p, err)
 		})
+}
+
+// checkUploadPath keeps the model away from files the user is unlikely to
+// have meant, such as keys and credentials in hidden folders, even though
+// every upload is approved. The CLI has no such limit.
+func checkUploadPath(path string) error {
+	if !filepath.IsAbs(path) {
+		return errors.New("give the absolute path of the file")
+	}
+	real, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return err
+	}
+	for _, p := range []string{path, real} {
+		for _, part := range strings.Split(filepath.ToSlash(p), "/") {
+			if strings.HasPrefix(part, ".") {
+				return fmt.Errorf("%s is or is inside a hidden file or folder; upload it with the tix CLI instead", path)
+			}
+		}
+	}
+	return nil
 }

@@ -819,3 +819,54 @@ func TestPlanWatch(t *testing.T) {
 		t.Errorf("watch out of scope: %v", err)
 	}
 }
+
+func TestPlanAttach(t *testing.T) {
+	t.Parallel()
+	f := fixture(t)
+	s := service(t, f, config.PrivacyOwn)
+	ctx := context.Background()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "notes for review.txt")
+	if err := os.WriteFile(path, []byte("hello"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p, err := s.PlanAttach(ctx, "PROJ-1", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Kind != Additive || !strings.Contains(p.Description, "Attach notes for review.txt (5 bytes, from "+path+")") {
+		t.Errorf("description = %q", p.Description)
+	}
+	// The plan uploads what was approved, not what the file holds later.
+	if err := os.WriteFile(path, []byte("changed after approval"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.Apply(ctx); err != nil {
+		t.Fatal(err)
+	}
+	as := f.Issues["PROJ-1"].Attachments
+	if last := as[len(as)-1]; last.Filename != "notes for review.txt" || string(last.Data) != "hello" {
+		t.Errorf("attachment = %+v", last)
+	}
+
+	big := filepath.Join(dir, "big.bin")
+	if err := os.WriteFile(big, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Truncate(big, maxAttachmentBytes+1); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ key, path, want string }{
+		{"PROJ-1", big, "the limit is 50.0 MiB"},
+		{"PROJ-1", dir, "not a regular file"},
+		{"PROJ-1", filepath.Join(dir, "missing"), "no such file"},
+		{"PROJ-2", path, ErrNotFound.Error()},
+	} {
+		if _, err := s.PlanAttach(ctx, tc.key, tc.path); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s %s: err = %v, want %q", tc.key, tc.path, err, tc.want)
+		}
+	}
+	if n := len(f.Issues["PROJ-1"].Attachments); n != len(as) {
+		t.Errorf("refused uploads changed the ticket: %d attachments", n)
+	}
+}

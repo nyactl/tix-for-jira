@@ -115,7 +115,12 @@ func (c *Client) newRequest(ctx context.Context, method, path string, query url.
 		u += "?" + query.Encode()
 	}
 	var r io.Reader
-	if body != nil {
+	contentType := "application/json"
+	switch b := body.(type) {
+	case nil:
+	case rawBody:
+		r, contentType = bytes.NewReader(b.data), b.contentType
+	default:
 		data, err := json.Marshal(body)
 		if err != nil {
 			return nil, err
@@ -130,9 +135,19 @@ func (c *Client) newRequest(ctx context.Context, method, path string, query url.
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", c.userAgent)
 	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Type", contentType)
+	}
+	if _, ok := body.(rawBody); ok {
+		// Jira refuses multipart uploads without it (XSRF protection).
+		req.Header.Set("X-Atlassian-Token", "no-check")
 	}
 	return req, nil
+}
+
+// rawBody is a request body sent as is, e.g. a multipart upload.
+type rawBody struct {
+	data        []byte
+	contentType string
 }
 
 // send performs the request, retrying on 429 and 503 as advised by

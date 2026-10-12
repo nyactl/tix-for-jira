@@ -215,6 +215,20 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 		},
 	}
 
+	attach := &cobra.Command{
+		Use:   "attach <key> <file>",
+		Short: "Upload a local file to a ticket",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, _, err := a.service(cmd)
+			if err != nil {
+				return err
+			}
+			p, err := svc.PlanAttach(cmd.Context(), args[0], args[1])
+			return a.apply(cmd, svc, p, err)
+		},
+	}
+
 	watchCmd := func(use, short string, watch bool) *cobra.Command {
 		return &cobra.Command{
 			Use:   use + " <key>",
@@ -231,7 +245,7 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 		}
 	}
 
-	root.AddCommand(comment, update, transition, create, logWork, link, take,
+	root.AddCommand(comment, update, transition, create, logWork, link, take, attach,
 		watchCmd("watch", "Watch a ticket to get its notifications", true),
 		watchCmd("unwatch", "Stop watching a ticket", false))
 }

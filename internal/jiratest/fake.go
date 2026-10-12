@@ -5,6 +5,7 @@
 package jiratest
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -270,6 +271,7 @@ func (f *Fake) serve(w http.ResponseWriter, r *http.Request) {
 	var body map[string]any
 	if r.Body != nil && (r.Method == http.MethodPost || r.Method == http.MethodPut) {
 		data, _ := io.ReadAll(r.Body)
+		r.Body = io.NopCloser(bytes.NewReader(data))
 		_ = json.Unmarshal(data, &body)
 		// Adding a watcher takes a bare JSON string.
 		var accountID string
@@ -497,6 +499,20 @@ func (f *Fake) issueRoute(w http.ResponseWriter, r *http.Request, i *Issue, sub 
 	case "/watchers DELETE":
 		i.Watchers = slices.DeleteFunc(i.Watchers, func(a string) bool { return a == r.URL.Query().Get("accountId") })
 		w.WriteHeader(204)
+	case "/attachments POST":
+		if r.Header.Get("X-Atlassian-Token") != "no-check" {
+			errJSON(w, 403, "XSRF check failed")
+			return
+		}
+		file, hdr, err := r.FormFile("file")
+		if err != nil {
+			errJSON(w, 400, "no file: "+err.Error())
+			return
+		}
+		data, _ := io.ReadAll(file)
+		a := Attachment{ID: f.id(), Filename: hdr.Filename, Author: me.AccountID, MimeType: "text/plain", Created: "2026-10-08T10:00:00.000+0000", Data: data}
+		i.Attachments = append(i.Attachments, a)
+		writeJSON(w, 200, []any{map[string]any{"id": a.ID, "filename": a.Filename, "size": len(data), "mimeType": a.MimeType, "author": f.userJSON(me.AccountID), "created": a.Created}})
 	case "/assignee PUT":
 		i.Assignee, _ = body["accountId"].(string)
 		w.WriteHeader(204)

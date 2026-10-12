@@ -1,11 +1,13 @@
 package jira
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"slices"
@@ -424,4 +426,32 @@ func (c *Client) Suggestions(ctx context.Context, fieldName, value string) ([]Su
 		return nil, err
 	}
 	return out.Results, nil
+}
+
+// AddAttachment uploads one file to an issue.
+func (c *Client) AddAttachment(ctx context.Context, key, filename string, data []byte) (*Attachment, error) {
+	p, err := issuePath(key, "/attachments")
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	part, err := w.CreateFormFile("file", filename)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := part.Write(data); err != nil {
+		return nil, err
+	}
+	if err := w.Close(); err != nil {
+		return nil, err
+	}
+	var out []Attachment
+	if err := c.do(ctx, http.MethodPost, p, nil, rawBody{buf.Bytes(), w.FormDataContentType()}, &out); err != nil {
+		return nil, err
+	}
+	if len(out) == 0 {
+		return nil, errors.New("the upload was accepted but Jira returned no attachment")
+	}
+	return &out[0], nil
 }

@@ -61,6 +61,7 @@ tix create --project PROJ --type Task --summary "Follow-up" --description -   # 
 tix link PROJ-123 "is blocked by" PROJ-124
 tix take PROJ-130                  # assign an unassigned ticket to yourself
 tix watch PROJ-123                 # and tix unwatch PROJ-123
+tix attach PROJ-123 ./screenshot.png   # upload a file (up to 50 MiB)
 tix sprint move PROJ-123 "Sprint 12"   # or: tix sprint move PROJ-123 backlog
 ```
 
@@ -91,7 +92,7 @@ No credentials go into the client configuration; tix-for-jira reads them from it
 
 | Read tools | Write tools (with `--allow-writes`) |
 |---|---|
-| `whoami`, `my_issues`, `search_issues`, `get_issue`, `list_comments`, `get_history`, `list_worklogs`, `list_transitions`, `list_editable_fields`, `get_attachment`, `list_link_types`, `list_projects`, `list_issue_types`, `list_boards`, `list_sprints`, `get_active_sprint`, `get_backlog` | `add_comment`, `update_fields`, `transition_issue`, `create_issue`, `log_work`, `link_issues`, `assign_to_me`, `watch_issue`, `unwatch_issue`, `move_to_sprint` |
+| `whoami`, `my_issues`, `search_issues`, `get_issue`, `list_comments`, `get_history`, `list_worklogs`, `list_transitions`, `list_editable_fields`, `get_attachment`, `list_link_types`, `list_projects`, `list_issue_types`, `list_boards`, `list_sprints`, `get_active_sprint`, `get_backlog` | `add_comment`, `update_fields`, `transition_issue`, `create_issue`, `log_work`, `link_issues`, `assign_to_me`, `attach_file`, `watch_issue`, `unwatch_issue`, `move_to_sprint` |
 
 Every tool carries `readOnlyHint` / `destructiveHint` annotations.
 
