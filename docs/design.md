@@ -11,16 +11,18 @@ tix-for-jira lets an assistant work on **your own** Jira Cloud tickets through M
 ```
 cmd: main.go
  └─ internal/cli         cobra commands, terminal confirmation
- └─ internal/mcpserver   MCP tools, elicitation-based confirmation
+ └─ internal/mcpserver   MCP tools; approval through approvekit/approval
      └─ internal/core    operations: scope checks, redaction, write plans
-         ├─ internal/jira      Jira Cloud REST v3 client
-         ├─ go-adf (module)    Atlassian Document Format <-> Markdown
-         ├─ internal/privacy   scope rules and person redaction
-         └─ internal/render    views -> Markdown / JSON
- internal/config    non-secret settings (site, email, privacy mode)
- internal/secret    Keychain-backed token store
- internal/sanitize  strips control and invisible characters
+         ├─ internal/jira      Jira endpoints on approvekit/atlassian
+         ├─ internal/privacy   tix's scope rule (only my tickets)
+         ├─ internal/render    views -> Markdown / JSON
+         ├─ go-adf             Atlassian Document Format <-> Markdown
+         └─ approvekit/people  labels for people, redaction
+ internal/config    non-secret settings on approvekit/profile
  internal/jiratest  in-memory fake Jira Cloud for tests
+
+ Shared modules: github.com/nyactl/go-adf, github.com/nyactl/approvekit
+ (keychain, sanitize, approval, people, atlassian, profile).
 ```
 
 `core` is the only layer that touches raw Jira data. It returns *views*: plain structs with Markdown text and person labels already applied. The MCP server and the CLI only ever render views, so no code path can accidentally print a raw API object with account IDs, emails or avatar URLs.

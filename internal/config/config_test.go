@@ -7,39 +7,9 @@ import (
 	"strings"
 	"testing"
 	"time"
-)
 
-func TestNormalizeSite(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		in, want, wantErr string
-	}{
-		{in: "team.atlassian.net", want: "https://team.atlassian.net"},
-		{in: "https://Team.Atlassian.net/", want: "https://team.atlassian.net"},
-		{in: " https://team.atlassian.net ", want: "https://team.atlassian.net"},
-		{in: "http://team.atlassian.net", wantErr: "must use https"},
-		{in: "https://team.atlassian.net/jira", wantErr: "without a path"},
-		{in: "https://u:p@team.atlassian.net", wantErr: "credentials"},
-		{in: "https://team.atlassian.net?x=1", wantErr: "query"},
-		{in: "", wantErr: "required"},
-		{in: "https://", wantErr: "no host"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.in, func(t *testing.T) {
-			t.Parallel()
-			got, err := NormalizeSite(tt.in)
-			if tt.wantErr != "" {
-				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
-					t.Fatalf("err = %v, want containing %q", err, tt.wantErr)
-				}
-				return
-			}
-			if err != nil || got != tt.want {
-				t.Fatalf("got %q, %v; want %q", got, err, tt.want)
-			}
-		})
-	}
-}
+	"github.com/nyactl/approvekit/profile"
+)
 
 func TestSaveLoadRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sub", "config.json")
@@ -48,23 +18,35 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	if _, err := Load(""); !errors.Is(err, ErrNotConfigured) {
 		t.Fatalf("Load before save: %v", err)
 	}
-	c := &Config{Site: "team.atlassian.net", Email: "me@example.com", Privacy: PrivacyOwn, TokenExpiry: "2027-01-31"}
+	c := &Config{Account: profile.Account{Site: "team.atlassian.net", Email: "me@example.com", TokenExpiry: "2027-01-31"}, Privacy: PrivacyOff}
 	if err := c.Save(""); err != nil {
 		t.Fatal(err)
-	}
-	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
-		t.Errorf("config permissions = %o, want 600", perm)
 	}
 	got, err := Load("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if *got != (Config{Site: "https://team.atlassian.net", Email: "me@example.com", Privacy: PrivacyOwn, TokenExpiry: "2027-01-31"}) {
+	want := Config{Account: profile.Account{Site: "https://team.atlassian.net", Email: "me@example.com", TokenExpiry: "2027-01-31"}, Privacy: PrivacyOff}
+	if *got != want {
 		t.Errorf("loaded %+v", got)
+	}
+}
+
+// TestReadsExistingFiles keeps config files written by earlier versions
+// readable.
+func TestReadsExistingFiles(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv("TIX_JIRA_CONFIG", path)
+	old := `{"site":"https://team.atlassian.net","email":"me@example.com","privacy":"own","tokenExpiry":"2027-01-31","allowDevBuilds":true,"scopedToken":true,"cloudId":"0b8e7c1a-5d2f-4e3a-9b6c-1f2e3d4c5b6a"}`
+	if err := os.WriteFile(path, []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Site != "https://team.atlassian.net" || c.Privacy != PrivacyOwn || !c.AllowDevBuilds || !c.ScopedToken || c.CloudID == "" || c.TokenExpiry != "2027-01-31" {
+		t.Errorf("loaded %+v", c)
 	}
 }
 
@@ -83,87 +65,30 @@ func TestLoadDefaultsPrivacyToOwn(t *testing.T) {
 	}
 }
 
-func TestValidateRejects(t *testing.T) {
+func TestValidateRejectsPrivacy(t *testing.T) {
 	t.Parallel()
-	base := Config{Site: "https://team.atlassian.net", Email: "me@example.com", Privacy: PrivacyOwn}
-	tests := []struct {
-		name   string
-		mutate func(*Config)
-		want   string
-	}{
-		{"bad email", func(c *Config) { c.Email = "not-an-email" }, "invalid email"},
-		{"display name email", func(c *Config) { c.Email = "Me <me@example.com>" }, "invalid email"},
-		{"bad privacy", func(c *Config) { c.Privacy = "some" }, "invalid privacy"},
-		{"bad expiry", func(c *Config) { c.TokenExpiry = "31.01.2027" }, "invalid token expiry"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			c := base
-			tt.mutate(&c)
-			if err := c.Validate(); err == nil || !strings.Contains(err.Error(), tt.want) {
-				t.Errorf("err = %v, want %q", err, tt.want)
-			}
-		})
+	c := Config{Account: profile.Account{Site: "https://team.atlassian.net", Email: "me@example.com"}, Privacy: "some"}
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "invalid privacy") {
+		t.Errorf("err = %v", err)
 	}
 }
 
-func TestExpiryWarning(t *testing.T) {
+func TestExpiryWarningNamesLogin(t *testing.T) {
 	t.Parallel()
-	now := time.Date(2026, 10, 8, 15, 0, 0, 0, time.UTC)
-	tests := []struct {
-		expiry string
-		want   string
-	}{
-		{"", ""},
-		{"2026-12-31", ""},
-		{"2026-10-20", "in 12 days"},
-		{"2026-10-08", "in 0 days"},
-		{"2026-10-01", "expired"},
-	}
-	for _, tt := range tests {
-		c := Config{TokenExpiry: tt.expiry}
-		got := c.ExpiryWarning(now)
-		if (tt.want == "") != (got == "") || !strings.Contains(got, tt.want) {
-			t.Errorf("expiry %q: got %q, want containing %q", tt.expiry, got, tt.want)
-		}
+	c := Config{Account: profile.Account{TokenExpiry: "2026-10-20"}}
+	if got := c.ExpiryWarning(time.Date(2026, 10, 8, 15, 0, 0, 0, time.UTC)); !strings.Contains(got, "in 12 days") || !strings.Contains(got, "tix auth login") {
+		t.Errorf("got %q", got)
 	}
 }
 
-func TestProfiles(t *testing.T) {
+func TestProfilePaths(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("TIX_JIRA_CONFIG", "")
-	t.Setenv("TIX_JIRA_PROFILE", "")
-
-	def, _ := Path("")
-	test, _ := Path("test")
-	if filepath.Base(def) != "config.json" || filepath.Base(test) != "test.json" || filepath.Dir(filepath.Dir(test)) != filepath.Dir(def) {
-		t.Errorf("paths: %s %s", def, test)
-	}
 	t.Setenv("TIX_JIRA_PROFILE", "test")
-	if p, _ := Path(""); p != test {
-		t.Errorf("TIX_JIRA_PROFILE ignored: %s", p)
-	}
-	if p, _ := Path("default"); p != def {
-		t.Errorf("explicit profile must win over the environment: %s", p)
-	}
-	for _, bad := range []string{"../x", "Test", "a/b", "-x", strings.Repeat("a", 33)} {
-		if _, err := Path(bad); err == nil {
-			t.Errorf("profile %q accepted", bad)
-		}
-	}
-
-	c := Config{Site: "a.atlassian.net", Email: "me@example.com", Privacy: PrivacyOwn}
-	if err := c.Save("default"); err != nil {
-		t.Fatal(err)
-	}
-	if err := c.Save("test"); err != nil {
-		t.Fatal(err)
-	}
-	got, err := Profiles()
-	if err != nil || strings.Join(got, ",") != "default,test" {
-		t.Errorf("Profiles = %v, %v", got, err)
+	p, err := Path("")
+	if err != nil || filepath.Base(p) != "test.json" || !strings.Contains(p, filepath.Join("tix-for-jira", "profiles")) {
+		t.Errorf("Path = %s, %v", p, err)
 	}
 }

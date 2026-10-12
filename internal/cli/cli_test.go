@@ -4,15 +4,16 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/nyactl/approvekit/atlassian"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/nyactl/approvekit/keychain"
+	"github.com/nyactl/approvekit/profile"
 	"github.com/nyactl/tix-for-jira/internal/config"
-	"github.com/nyactl/tix-for-jira/internal/jira"
 	"github.com/nyactl/tix-for-jira/internal/jiratest"
-	"github.com/nyactl/tix-for-jira/internal/secret"
 )
 
 // script is a fake terminal that answers prompts in order.
@@ -45,7 +46,7 @@ func (s *script) Secret(q string) (string, error) {
 
 type env struct {
 	fake    *jiratest.Fake
-	secrets *secret.Memory
+	secrets *keychain.Memory
 	tty     *script
 	dev     bool // run as a development build instead of a release
 }
@@ -62,16 +63,16 @@ func newEnv(t *testing.T) *env {
 	f := jiratest.New(t)
 	f.AddIssue(jiratest.Issue{Key: "PROJ-1", Summary: "Mine", Assignee: "acc-me", Reporter: "acc-alice", Description: jiratest.Doc("Ask Alice Smith")})
 	f.AddIssue(jiratest.Issue{Key: "PROJ-2", Summary: "Not mine", Assignee: "acc-alice"})
-	return &env{fake: f, secrets: secret.NewMemory(), tty: &script{}}
+	return &env{fake: f, secrets: keychain.NewMemory(), tty: &script{}}
 }
 
 func (e *env) loggedIn(t *testing.T) *env {
 	t.Helper()
-	cfg := &config.Config{Site: e.fake.URL(), Email: "me@example.com", Privacy: config.PrivacyOwn}
+	cfg := &config.Config{Account: profile.Account{Site: e.fake.URL(), Email: "me@example.com"}, Privacy: config.PrivacyOwn}
 	if err := cfg.Save(""); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.secrets.Set(secret.AccountKey(cfg.Site, cfg.Email), "tok-me"); err != nil {
+	if err := e.secrets.Set(keychain.AccountKey(cfg.Site, cfg.Email), "tok-me"); err != nil {
 		t.Fatal(err)
 	}
 	return e
@@ -106,7 +107,7 @@ func TestLogin(t *testing.T) {
 	if err != nil || cfg.TokenExpiry != "2027-01-31" || cfg.Privacy != config.PrivacyOwn {
 		t.Fatalf("config = %+v, %v", cfg, err)
 	}
-	if tok, _ := e.secrets.Get(secret.AccountKey(cfg.Site, cfg.Email)); tok != "tok-me" {
+	if tok, _ := e.secrets.Get(keychain.AccountKey(cfg.Site, cfg.Email)); tok != "tok-me" {
 		t.Errorf("stored token = %q", tok)
 	}
 }
@@ -119,7 +120,7 @@ func TestLoginWithTokenFromStdin(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg, _ := config.Load("")
-	if tok, _ := e.secrets.Get(secret.AccountKey(cfg.Site, cfg.Email)); tok != "tok-me" {
+	if tok, _ := e.secrets.Get(keychain.AccountKey(cfg.Site, cfg.Email)); tok != "tok-me" {
 		t.Errorf("stored token = %q", tok)
 	}
 }
@@ -335,7 +336,7 @@ func TestDevBuildNeedsExplicitProfile(t *testing.T) {
 		}
 	}
 	for _, v := range []string{"v0.1.0", "v1.2.3-rc.1"} {
-		if !isRelease(v) {
+		if !profile.IsRelease(v) {
 			t.Errorf("%s should count as a release", v)
 		}
 	}
@@ -352,11 +353,11 @@ func profileHome(t *testing.T) {
 
 func saveProfile(t *testing.T, e *env, name string, allowDev bool) {
 	t.Helper()
-	cfg := &config.Config{Site: e.fake.URL(), Email: "me@example.com", Privacy: config.PrivacyOwn, AllowDevBuilds: allowDev}
+	cfg := &config.Config{Account: profile.Account{Site: e.fake.URL(), Email: "me@example.com", AllowDevBuilds: allowDev}, Privacy: config.PrivacyOwn}
 	if err := cfg.Save(name); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.secrets.Set(secret.AccountKey(cfg.Site, cfg.Email), "tok-me"); err != nil {
+	if err := e.secrets.Set(keychain.AccountKey(cfg.Site, cfg.Email), "tok-me"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -374,13 +375,13 @@ func TestDevBuildsStayAwayFromProduction(t *testing.T) {
 		{"mine", "--profile", "test"},
 		{"mcp", "--profile", "default"},
 	} {
-		if _, _, err := e.run(t, args...); !errors.Is(err, errDevBuildNotAllowed) {
+		if _, _, err := e.run(t, args...); !errors.Is(err, profile.ErrDevBuildNotAllowed) {
 			t.Errorf("%v: err = %v", args, err)
 		}
 	}
 	e.tty.secrets = []string{"tok-me"}
 	e.tty.answers = []string{""}
-	if _, _, err := e.run(t, "auth", "login", "--profile", "default", "--site", e.fake.URL(), "--email", "me@example.com"); !errors.Is(err, errDevBuildNotAllowed) {
+	if _, _, err := e.run(t, "auth", "login", "--profile", "default", "--site", e.fake.URL(), "--email", "me@example.com"); !errors.Is(err, profile.ErrDevBuildNotAllowed) {
 		t.Errorf("dev build login to default: %v", err)
 	}
 	if n := len(e.fake.Requests) - before; n != 0 {
@@ -454,7 +455,7 @@ func TestLoginWithScopedToken(t *testing.T) {
 
 	// Boards need Jira Software scopes this token does not have.
 	_, _, err = e.run(t, "boards")
-	if !errors.Is(err, jira.ErrMissingScope) || !strings.Contains(err.Error(), "read:board-scope:jira-software and read:project:jira") {
+	if !errors.Is(err, atlassian.ErrMissingScope) || !strings.Contains(err.Error(), "read:board-scope:jira-software and read:project:jira") {
 		t.Errorf("boards: %v", err)
 	}
 	out, _, _ = e.run(t, "config", "show")

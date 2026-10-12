@@ -165,7 +165,7 @@ func (s *Service) scopeFilter() string {
 func (s *Service) inScope(issues []jira.Issue) []IssueSummary {
 	out := []IssueSummary{}
 	for i := range issues {
-		if s.people.InScope(issues[i].Fields.Assignee) {
+		if s.visible(issues[i].Fields.Assignee) {
 			s.learn(&issues[i])
 			out = append(out, s.summary(&issues[i]))
 		}

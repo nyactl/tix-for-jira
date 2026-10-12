@@ -8,9 +8,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/nyactl/approvekit/sanitize"
 	"github.com/nyactl/tix-for-jira/internal/core"
 	"github.com/nyactl/tix-for-jira/internal/render"
-	"github.com/nyactl/tix-for-jira/internal/sanitize"
 )
 
 // apply asks for confirmation on the terminal and applies the plan.

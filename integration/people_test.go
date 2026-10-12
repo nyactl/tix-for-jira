@@ -10,10 +10,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nyactl/approvekit/keychain"
 	adf "github.com/nyactl/go-adf"
 	"github.com/nyactl/tix-for-jira/internal/core"
 	"github.com/nyactl/tix-for-jira/internal/jira"
-	"github.com/nyactl/tix-for-jira/internal/secret"
 )
 
 // otherPerson is a second account on the test site, driven directly
@@ -35,7 +35,7 @@ func setupOther(t *testing.T, s *site) *otherPerson {
 	if cfg.Site != s.cfg.Site {
 		t.Fatalf("profile %s points to %s, not the test site %s", profile, cfg.Site, s.cfg.Site)
 	}
-	token, err := secret.NewKeychain().Get(secret.AccountKey(cfg.Site, cfg.Email))
+	token, err := keychain.New("tix-for-jira").Get(keychain.AccountKey(cfg.Site, cfg.Email))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,19 +1,15 @@
 // Package config stores the non-secret settings: Jira site, account email,
-// privacy mode and token expiry. The API token itself lives in the Keychain
-// (see package secret).
+// privacy mode and token expiry, per profile. The API token itself lives in
+// the Keychain. Profiles, validation and the development-build lock come
+// from approvekit's profile package.
 package config
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net/mail"
-	"net/url"
-	"os"
-	"path/filepath"
-	"regexp"
-	"strings"
 	"time"
+
+	"github.com/nyactl/approvekit/profile"
 )
 
 // PrivacyMode controls what the assistant can see; see docs/design.md.
@@ -26,214 +22,63 @@ const (
 
 // Config is persisted as JSON in the user's config directory.
 type Config struct {
-	Site        string      `json:"site"`
-	Email       string      `json:"email"`
-	Privacy     PrivacyMode `json:"privacy"`
-	TokenExpiry string      `json:"tokenExpiry,omitempty"` // YYYY-MM-DD
-	// AllowDevBuilds lets development builds and the integration tests use
-	// this profile. It is never allowed for the default profile, which is
-	// meant for production.
-	AllowDevBuilds bool `json:"allowDevBuilds,omitempty"`
-	// ScopedToken marks a scoped API token, which only works through
-	// Atlassian's API gateway for the site with CloudID.
-	ScopedToken bool   `json:"scopedToken,omitempty"`
-	CloudID     string `json:"cloudId,omitempty"`
+	profile.Account
+	Privacy PrivacyMode `json:"privacy"`
 }
 
-var cloudIDRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+// DefaultProfile is used when no profile is selected; it is meant for
+// production.
+const DefaultProfile = profile.Default
 
 // ErrNotConfigured is returned by Load when no login has happened yet.
 var ErrNotConfigured = errors.New("this profile is not set up yet; run `tix auth login` (add --profile <name> for other profiles)")
 
-// DefaultProfile is used when no profile is selected.
-const DefaultProfile = "default"
-
-var profileRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
+// Store locates tix's profiles.
+var Store = profile.Store{App: "tix-for-jira", ProfileEnv: "TIX_JIRA_PROFILE", ConfigEnv: "TIX_JIRA_CONFIG"}
 
 // ResolveProfile returns profile, or TIX_JIRA_PROFILE, or DefaultProfile.
-func ResolveProfile(profile string) (string, error) {
-	if profile == "" {
-		profile = os.Getenv("TIX_JIRA_PROFILE")
-	}
-	if profile == "" {
-		return DefaultProfile, nil
-	}
-	if !profileRe.MatchString(profile) {
-		return "", fmt.Errorf("invalid profile name %q: use lowercase letters, digits and dashes", profile)
-	}
-	return profile, nil
-}
-
-func dir() (string, error) {
-	d, err := os.UserConfigDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(d, "tix-for-jira"), nil
-}
+func ResolveProfile(name string) (string, error) { return Store.Resolve(name) }
 
 // Path returns the config file of a profile. TIX_JIRA_CONFIG overrides it.
-func Path(profile string) (string, error) {
-	if p := os.Getenv("TIX_JIRA_CONFIG"); p != "" {
-		return p, nil
-	}
-	profile, err := ResolveProfile(profile)
-	if err != nil {
-		return "", err
-	}
-	d, err := dir()
-	if err != nil {
-		return "", err
-	}
-	if profile == DefaultProfile {
-		return filepath.Join(d, "config.json"), nil
-	}
-	return filepath.Join(d, "profiles", profile+".json"), nil
-}
+func Path(name string) (string, error) { return Store.Path(name) }
 
 // Profiles lists the profiles that have a config file.
-func Profiles() ([]string, error) {
-	d, err := dir()
-	if err != nil {
-		return nil, err
-	}
-	var out []string
-	if _, err := os.Stat(filepath.Join(d, "config.json")); err == nil {
-		out = append(out, DefaultProfile)
-	}
-	entries, err := os.ReadDir(filepath.Join(d, "profiles"))
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, err
-	}
-	for _, e := range entries {
-		if name, ok := strings.CutSuffix(e.Name(), ".json"); ok && profileRe.MatchString(name) {
-			out = append(out, name)
-		}
-	}
-	return out, nil
-}
+func Profiles() ([]string, error) { return Store.List() }
 
 // Load reads and validates a profile's config file.
-func Load(profile string) (*Config, error) {
-	p, err := Path(profile)
-	if err != nil {
-		return nil, err
-	}
-	data, err := os.ReadFile(p) //nolint:gosec // G304: the path is the user's own config location
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, ErrNotConfigured
-	}
-	if err != nil {
-		return nil, err
-	}
+func Load(name string) (*Config, error) {
 	var c Config
-	if err := json.Unmarshal(data, &c); err != nil {
-		return nil, fmt.Errorf("reading %s: %w", p, err)
-	}
-	if c.Privacy == "" {
-		c.Privacy = PrivacyOwn
-	}
-	if err := c.Validate(); err != nil {
-		return nil, fmt.Errorf("%s: %w", p, err)
+	if err := Store.Load(name, &c); err != nil {
+		if errors.Is(err, profile.ErrNotConfigured) {
+			return nil, ErrNotConfigured
+		}
+		return nil, err
 	}
 	return &c, nil
 }
 
 // Save validates and writes a profile's config file with owner-only
 // permissions.
-func (c *Config) Save(profile string) error {
-	if err := c.Validate(); err != nil {
-		return err
-	}
-	p, err := Path(profile)
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
-		return err
-	}
-	data, err := json.MarshalIndent(c, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp := p + ".tmp"
-	if err := os.WriteFile(tmp, append(data, '\n'), 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, p)
-}
+func (c *Config) Save(name string) error { return Store.Save(name, c) }
 
-// Validate checks every field.
+// Validate checks every field. A missing privacy mode means own.
 func (c *Config) Validate() error {
-	site, err := NormalizeSite(c.Site)
-	if err != nil {
-		return err
+	if c.Privacy == "" {
+		c.Privacy = PrivacyOwn
 	}
-	c.Site = site
-	if _, err := mail.ParseAddress(c.Email); err != nil || strings.ContainsAny(c.Email, "<> ") {
-		return fmt.Errorf("invalid email %q", c.Email)
+	if err := c.Account.Validate(); err != nil {
+		return err
 	}
 	switch c.Privacy {
 	case PrivacyOwn, PrivacyOff:
 	default:
 		return fmt.Errorf("invalid privacy mode %q (want %q or %q)", c.Privacy, PrivacyOwn, PrivacyOff)
 	}
-	if c.TokenExpiry != "" {
-		if _, err := time.Parse(time.DateOnly, c.TokenExpiry); err != nil {
-			return fmt.Errorf("invalid token expiry %q (want YYYY-MM-DD)", c.TokenExpiry)
-		}
-	}
-	if c.ScopedToken && !cloudIDRe.MatchString(c.CloudID) {
-		return fmt.Errorf("invalid cloud ID %q for a scoped token; run `tix auth login` again", c.CloudID)
-	}
 	return nil
-}
-
-// NormalizeSite accepts "example.atlassian.net" or "https://example.atlassian.net/"
-// and returns "https://example.atlassian.net". Only https is allowed.
-func NormalizeSite(raw string) (string, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return "", errors.New("site is required, e.g. https://your-team.atlassian.net")
-	}
-	if !strings.Contains(raw, "://") {
-		raw = "https://" + raw
-	}
-	u, err := url.Parse(raw)
-	if err != nil {
-		return "", fmt.Errorf("invalid site: %w", err)
-	}
-	switch {
-	case u.Scheme != "https":
-		return "", fmt.Errorf("site must use https, got %q", u.Scheme)
-	case u.Hostname() == "":
-		return "", errors.New("site has no host")
-	case u.User != nil:
-		return "", errors.New("site must not contain credentials")
-	case u.RawQuery != "" || u.Fragment != "":
-		return "", errors.New("site must not contain a query or fragment")
-	case strings.Trim(u.Path, "/") != "":
-		return "", errors.New("site must be the bare site URL without a path")
-	}
-	return "https://" + strings.ToLower(u.Host), nil
 }
 
 // ExpiryWarning returns a message when the recorded token expiry is within
 // two weeks or has passed, and "" otherwise.
 func (c *Config) ExpiryWarning(now time.Time) string {
-	if c.TokenExpiry == "" {
-		return ""
-	}
-	exp, err := time.Parse(time.DateOnly, c.TokenExpiry)
-	if err != nil {
-		return ""
-	}
-	days := int(exp.Sub(now.Truncate(24*time.Hour)).Hours() / 24)
-	switch {
-	case days < 0:
-		return fmt.Sprintf("your Jira API token expired on %s; create a new one and run `tix auth login`", c.TokenExpiry)
-	case days <= 14:
-		return fmt.Sprintf("your Jira API token expires on %s (in %d days); create a new one and run `tix auth login`", c.TokenExpiry, days)
-	}
-	return ""
+	return c.Account.ExpiryWarning(now, "run `tix auth login`")
 }

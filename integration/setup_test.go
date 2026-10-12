@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/nyactl/approvekit/atlassian"
 	"io"
 	"net/http"
 	"os"
@@ -15,9 +16,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nyactl/approvekit/keychain"
 	"github.com/nyactl/tix-for-jira/internal/config"
 	"github.com/nyactl/tix-for-jira/internal/jira"
-	"github.com/nyactl/tix-for-jira/internal/secret"
 )
 
 // rawSite calls the Jira REST API directly for setup steps tix itself does
@@ -31,7 +32,7 @@ type rawSite struct {
 func newRawSite(t *testing.T, profile string) *rawSite {
 	t.Helper()
 	cfg := testSiteConfig(t, profile)
-	token, err := secret.NewKeychain().Get(secret.AccountKey(cfg.Site, cfg.Email))
+	token, err := keychain.New("tix-for-jira").Get(keychain.AccountKey(cfg.Site, cfg.Email))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +53,7 @@ func (r *rawSite) call(t *testing.T, method, path string, body, out any) int {
 	}
 	base := r.cfg.Site
 	if r.cfg.ScopedToken {
-		base = jira.Gateway + "/ex/jira/" + r.cfg.CloudID
+		base = atlassian.Gateway + "/ex/jira/" + r.cfg.CloudID
 	}
 	req, err := http.NewRequest(method, base+path, rd)
 	if err != nil {

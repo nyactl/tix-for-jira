@@ -11,10 +11,11 @@ import (
 	"unicode/utf8"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/nyactl/approvekit/approval"
+	"github.com/nyactl/approvekit/sanitize"
 	"github.com/nyactl/tix-for-jira/internal/config"
 	"github.com/nyactl/tix-for-jira/internal/core"
 	"github.com/nyactl/tix-for-jira/internal/render"
-	"github.com/nyactl/tix-for-jira/internal/sanitize"
 )
 
 // Options configure the server.
@@ -29,7 +30,7 @@ type Options struct {
 type server struct {
 	svc  *core.Service
 	opts Options
-	gate *gate
+	gate *approval.Gate
 }
 
 func instructions(site string, mode config.PrivacyMode, writes bool) string {
@@ -51,7 +52,7 @@ func instructions(site string, mode config.PrivacyMode, writes bool) string {
 
 // New builds the MCP server.
 func New(svc *core.Service, opts Options) *mcp.Server {
-	s := &server{svc: svc, opts: opts, gate: newGate()}
+	s := &server{svc: svc, opts: opts, gate: approval.NewGate()}
 	srv := mcp.NewServer(&mcp.Implementation{Name: "tix-for-jira", Version: opts.Version}, &mcp.ServerOptions{
 		Instructions: instructions(svc.Site(), svc.Mode(), opts.AllowWrites),
 	})
@@ -348,7 +349,7 @@ func (s *server) approveThenApply(ctx context.Context, req *mcp.CallToolRequest,
 	if s.opts.Target != "" {
 		desc = s.opts.Target + "\n\n" + desc
 	}
-	if res, err := s.gate.check(req, tool, args, desc); res != nil || err != nil {
+	if res, err := s.gate.Check(req, tool, args, desc); res != nil || err != nil {
 		return res, nil, err
 	}
 	msg, err := plan.Apply(ctx)

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/nyactl/approvekit/atlassian"
 	"os"
 	"path"
 	"path/filepath"
@@ -15,9 +16,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nyactl/tix-for-jira/internal/config"
+	"github.com/nyactl/approvekit/people"
+	"github.com/nyactl/approvekit/sanitize"
 	"github.com/nyactl/tix-for-jira/internal/jira"
-	"github.com/nyactl/tix-for-jira/internal/sanitize"
+	"github.com/nyactl/tix-for-jira/internal/privacy"
 )
 
 // summaryFields includes the reporter only to learn their name for redaction.
@@ -77,7 +79,7 @@ func (s *Service) MyIssues(ctx context.Context, o MyIssuesOptions) ([]IssueSumma
 
 // Search runs JQL limited to the privacy scope.
 func (s *Service) Search(ctx context.Context, jql string, max int) ([]IssueSummary, error) {
-	scoped, err := s.people.ScopeJQL(jql)
+	scoped, err := privacy.ScopeJQL(s.people.Mode(), jql)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +96,7 @@ func (s *Service) search(ctx context.Context, jql string, max int) ([]IssueSumma
 	}
 	var in []*jira.Issue
 	for i := range issues {
-		if s.people.InScope(issues[i].Fields.Assignee) {
+		if s.visible(issues[i].Fields.Assignee) {
 			s.learn(&issues[i])
 			in = append(in, &issues[i])
 		}
@@ -159,22 +161,22 @@ func (s *Service) Issue(ctx context.Context, key string) (*IssueDetail, error) {
 		return nil, err
 	}
 	issue, err := s.jc.GetIssue(ctx, k)
-	if errors.Is(err, jira.ErrNotFound) {
+	if errors.Is(err, atlassian.ErrNotFound) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
 	f := issue.Fields
-	if !s.people.InScope(f.Assignee) {
+	if !s.visible(f.Assignee) {
 		return nil, ErrNotFound
 	}
 
 	s.learn(issue)
 	d := &IssueDetail{
 		URL:      s.issueURL(issue.Key),
-		Assignee: s.people.User(f.Assignee),
-		Reporter: s.people.User(f.Reporter),
+		Assignee: s.user(f.Assignee),
+		Reporter: s.user(f.Reporter),
 		Created:  s.when(f.Created),
 	}
 	if d.Assignee == "" {
@@ -183,7 +185,7 @@ func (s *Service) Issue(ctx context.Context, key string) (*IssueDetail, error) {
 	for _, a := range f.Attachments {
 		d.Attachments = append(d.Attachments, AttachmentInfo{
 			ID: a.ID, Filename: sanitize.String(path.Base(a.Filename)), MimeType: a.MimeType, Size: a.Size,
-			Author: s.people.User(a.Author), Created: s.when(a.Created),
+			Author: s.user(a.Author), Created: s.when(a.Created),
 		})
 	}
 	d.Fields = s.customFields(ctx, issue)
@@ -249,7 +251,7 @@ func (s *Service) related(relation string, r *jira.RelatedIssue) Related {
 	if r.Fields.Status != nil {
 		v.Status = r.Fields.Status.Name
 	}
-	if s.people.Mode() == config.PrivacyOff {
+	if s.people.Mode() == people.Off {
 		v.Summary = s.people.Text(r.Fields.Summary)
 	}
 	return v
@@ -353,7 +355,7 @@ func (s *Service) Comments(ctx context.Context, key string, max int) ([]CommentV
 	}
 	out := make([]CommentView, len(cs))
 	for i, c := range cs {
-		out[i] = CommentView{ID: c.ID, Author: s.people.User(c.Author), Created: s.when(c.Created), Edited: c.Updated != "" && c.Updated != c.Created}
+		out[i] = CommentView{ID: c.ID, Author: s.user(c.Author), Created: s.when(c.Created), Edited: c.Updated != "" && c.Updated != c.Created}
 	}
 	for i, c := range cs {
 		out[i].Body = s.markdown(c.Body)
@@ -392,7 +394,7 @@ func (s *Service) History(ctx context.Context, key, since string, max int) ([]Ch
 				continue
 			}
 		}
-		v := ChangeView{Author: s.people.User(e.Author), When: s.when(e.Created)}
+		v := ChangeView{Author: s.user(e.Author), When: s.when(e.Created)}
 		for _, it := range e.Items {
 			v.Changes = append(v.Changes, s.change(it, defs))
 		}
@@ -411,7 +413,7 @@ func (s *Service) change(it jira.ChangeItem, defs map[string]jira.Field) FieldCh
 	isPeople := known && def.Schema != nil && def.Schema.Type == "array" && def.Schema.Items == "user"
 	switch {
 	case isPeople:
-		if s.people.Mode() == config.PrivacyOwn {
+		if s.people.Mode() == people.Own {
 			c.From, c.To = "(people)", "(people)"
 		} else {
 			c.From, c.To = it.FromString, it.ToString
@@ -471,7 +473,7 @@ func (s *Service) Worklogs(ctx context.Context, key string, max int) ([]WorklogV
 	}
 	out := make([]WorklogView, len(ws))
 	for i, w := range ws {
-		out[i] = WorklogView{ID: w.ID, Author: s.people.User(w.Author), Started: s.when(w.Started), TimeSpent: w.TimeSpent}
+		out[i] = WorklogView{ID: w.ID, Author: s.user(w.Author), Started: s.when(w.Started), TimeSpent: w.TimeSpent}
 	}
 	for i, w := range ws {
 		out[i].Comment = s.markdown(w.Comment)
@@ -611,7 +613,7 @@ func (s *Service) Attachment(ctx context.Context, key, id, dir string) (*Attachm
 		return nil, err
 	}
 	out := &AttachmentFile{
-		AttachmentInfo: AttachmentInfo{ID: id, Filename: name, MimeType: meta.MimeType, Size: n, Author: s.people.User(meta.Author), Created: s.when(meta.Created)},
+		AttachmentInfo: AttachmentInfo{ID: id, Filename: name, MimeType: meta.MimeType, Size: n, Author: s.user(meta.Author), Created: s.when(meta.Created)},
 		Path:           target,
 	}
 	if n <= maxInlineBytes && inlineable(meta.MimeType) {

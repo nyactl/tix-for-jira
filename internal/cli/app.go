@@ -5,22 +5,23 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/nyactl/approvekit/atlassian"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime/debug"
 	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/nyactl/approvekit/keychain"
+	"github.com/nyactl/approvekit/profile"
+	"github.com/nyactl/approvekit/sanitize"
 	"github.com/nyactl/tix-for-jira/internal/config"
 	"github.com/nyactl/tix-for-jira/internal/core"
 	"github.com/nyactl/tix-for-jira/internal/jira"
 	"github.com/nyactl/tix-for-jira/internal/render"
-	"github.com/nyactl/tix-for-jira/internal/sanitize"
-	"github.com/nyactl/tix-for-jira/internal/secret"
 )
 
 // App holds the command dependencies, replaceable in tests.
@@ -29,7 +30,7 @@ type App struct {
 	In       io.Reader
 	Out, Err io.Writer
 	TTY      Terminal
-	Secrets  secret.Store
+	Secrets  keychain.Store
 	Now      func() time.Time
 	// Transport overrides the HTTP transport in tests.
 	Transport http.RoundTripper
@@ -39,7 +40,7 @@ type App struct {
 
 // Default returns the production dependencies.
 func Default(version string) *App {
-	return &App{Version: resolveVersion(version), In: os.Stdin, Out: os.Stdout, Err: os.Stderr, TTY: devTTY{}, Secrets: secret.NewKeychain(), Now: time.Now}
+	return &App{Version: resolveVersion(version), In: os.Stdin, Out: os.Stdout, Err: os.Stderr, TTY: devTTY{}, Secrets: keychain.New("tix-for-jira"), Now: time.Now}
 }
 
 func resolveVersion(v string) string {
@@ -103,28 +104,15 @@ func (a *App) print(cmd *cobra.Command, v any, markdown func() string) error {
 
 var errDevNeedsProfile = errors.New("this is a development build: choose a profile explicitly with --profile or TIX_JIRA_PROFILE, so it cannot touch your production site by accident")
 
-var (
-	releaseRe = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$`)
-	pseudoRe  = regexp.MustCompile(`[0-9]{14}-[0-9a-f]{12}`)
-)
-
-// isRelease reports whether v is a tagged release, as installed with
-// `go install ...@v1.2.3`. Builds from a checkout carry "dev", a
-// pseudo-version such as v0.0.0-20261009122403-4c701510dbd1, or "+dirty".
-func isRelease(v string) bool {
-	return releaseRe.MatchString(v) && !pseudoRe.MatchString(v)
-}
-
-var errDevBuildNotAllowed = errors.New("development builds may only use profiles that opted in with `config dev-builds on`; the default profile never can")
-
 // checkDevBuild keeps development builds away from production: they may only
 // use a non-default profile that explicitly allows them.
 func (a *App) checkDevBuild(prof string, cfg *config.Config) error {
-	if isRelease(a.Version) {
-		return nil
+	var account *profile.Account
+	if cfg != nil {
+		account = &cfg.Account
 	}
-	if prof == config.DefaultProfile || cfg == nil || !cfg.AllowDevBuilds {
-		return fmt.Errorf("%w (profile %s)", errDevBuildNotAllowed, prof)
+	if err := profile.CheckDevBuild(a.Version, prof, account); err != nil {
+		return fmt.Errorf("%w; opt in with `tix config dev-builds on`", err)
 	}
 	return nil
 }
@@ -133,7 +121,7 @@ func (a *App) checkDevBuild(prof string, cfg *config.Config) error {
 // one explicitly.
 func (a *App) profile(cmd *cobra.Command) (string, error) {
 	p, _ := cmd.Flags().GetString("profile")
-	if !isRelease(a.Version) && p == "" && os.Getenv("TIX_JIRA_PROFILE") == "" && os.Getenv("TIX_JIRA_CONFIG") == "" {
+	if !profile.IsRelease(a.Version) && !config.Store.Explicit(p) {
 		return "", errDevNeedsProfile
 	}
 	return config.ResolveProfile(p)
@@ -161,7 +149,10 @@ func (a *App) service(cmd *cobra.Command) (*core.Service, *config.Config, error)
 	if w := cfg.ExpiryWarning(a.Now()); w != "" {
 		_, _ = fmt.Fprintln(a.Err, "warning: "+w)
 	}
-	token, err := a.Secrets.Get(secret.AccountKey(cfg.Site, cfg.Email))
+	token, err := a.Secrets.Get(keychain.AccountKey(cfg.Site, cfg.Email))
+	if errors.Is(err, keychain.ErrNotFound) {
+		err = fmt.Errorf("%w; run `tix auth login`", err)
+	}
 	if err != nil {
 		return nil, nil, err
 	}
@@ -170,8 +161,11 @@ func (a *App) service(cmd *cobra.Command) (*core.Service, *config.Config, error)
 		cloudID = cfg.CloudID
 	}
 	svc, err := core.New(ctx, a.client(cfg.Site, cfg.Email, token, cloudID), cfg.Privacy)
-	if errors.Is(err, jira.ErrUnauthorized) && cfg.TokenExpiry != "" {
-		err = fmt.Errorf("%w (recorded expiry: %s)", err, cfg.TokenExpiry)
+	if errors.Is(err, atlassian.ErrUnauthorized) {
+		if cfg.TokenExpiry != "" {
+			err = fmt.Errorf("%w (recorded expiry: %s)", err, cfg.TokenExpiry)
+		}
+		err = fmt.Errorf("%w; then run `tix auth login`", err)
 	}
 	return svc, cfg, err
 }
@@ -179,16 +173,16 @@ func (a *App) service(cmd *cobra.Command) (*core.Service, *config.Config, error)
 // client returns a Jira client; a non-empty cloudID routes it through the
 // API gateway, as scoped tokens require.
 func (a *App) client(site, email, token, cloudID string) *jira.Client {
-	var opts []jira.Option
+	var opts []atlassian.Option
 	if a.Transport != nil {
-		opts = append(opts, jira.WithTransport(a.Transport))
+		opts = append(opts, atlassian.WithTransport(a.Transport))
 	}
 	if cloudID != "" {
 		gw := a.Gateway
 		if gw == "" {
-			gw = jira.Gateway
+			gw = atlassian.Gateway
 		}
-		opts = append(opts, jira.WithGateway(gw, cloudID))
+		opts = append(opts, atlassian.WithGateway(gw, cloudID))
 	}
 	return jira.New(site, email, token, a.Version, opts...)
 }
