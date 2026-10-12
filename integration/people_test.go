@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/nyactl/tix-for-jira/internal/adf"
-	"github.com/nyactl/tix-for-jira/internal/config"
 	"github.com/nyactl/tix-for-jira/internal/core"
 	"github.com/nyactl/tix-for-jira/internal/jira"
 	"github.com/nyactl/tix-for-jira/internal/secret"
@@ -32,10 +31,7 @@ func setupOther(t *testing.T, s *site) *otherPerson {
 	if profile == "" {
 		t.Skip("set TIX_JIRA_IT_OTHER_PROFILE to a profile of a second account on the test site (see integration/README.md)")
 	}
-	cfg, err := config.Load(profile)
-	if err != nil {
-		t.Fatal(err)
-	}
+	cfg := testSiteConfig(t, profile)
 	if cfg.Site != s.cfg.Site {
 		t.Fatalf("profile %s points to %s, not the test site %s", profile, cfg.Site, s.cfg.Site)
 	}

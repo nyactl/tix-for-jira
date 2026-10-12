@@ -66,10 +66,7 @@ func setup(t *testing.T) *site {
 	if project == "" || other == "" {
 		t.Fatal("set TIX_JIRA_IT_PROJECT and TIX_JIRA_IT_OTHER (see integration/README.md)")
 	}
-	cfg, err := config.Load("")
-	if err != nil {
-		t.Fatal(err)
-	}
+	cfg := testSiteConfig(t, "")
 	if cfg.Privacy != config.PrivacyOwn {
 		t.Fatal("the test site config must use privacy mode own")
 	}
@@ -83,6 +80,32 @@ func setup(t *testing.T) *site {
 		t.Fatal(err)
 	}
 	return &site{cfg: cfg, token: token, svc: svc, jc: jc, project: project, other: other, run: time.Now().Format("20060102-150405")}
+}
+
+// testSiteConfig loads a profile and refuses anything that could be
+// production: the default profile, profiles that did not opt in to
+// development builds, and any profile on the same site as the default
+// profile.
+func testSiteConfig(t *testing.T, profile string) *config.Config {
+	t.Helper()
+	name, err := config.ResolveProfile(profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if name == config.DefaultProfile {
+		t.Fatal("refusing to test against the default profile, which is meant for production; use a test profile")
+	}
+	cfg, err := config.Load(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.AllowDevBuilds {
+		t.Fatalf("profile %s has not opted in to development builds (`tix config dev-builds on --profile %s`); refusing to touch it", name, name)
+	}
+	if prod, err := config.Load(config.DefaultProfile); err == nil && prod.Site == cfg.Site {
+		t.Fatalf("profile %s points to %s, the site of the default (production) profile; refusing", name, cfg.Site)
+	}
+	return cfg
 }
 
 // applied returns a function that applies a plan, failing the test on any

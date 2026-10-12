@@ -19,6 +19,15 @@ These tests run tix-for-jira against a real Jira Cloud site. They create tickets
    tix --profile test2 auth login    # second account, its own API token
    ```
 
+7. Allow development builds and the tests to use these profiles, and only these:
+
+   ```sh
+   tix config dev-builds on --profile test
+   tix config dev-builds on --profile test2
+   ```
+
+   The tests refuse the default profile, profiles that did not opt in, and any profile on the same site as the default profile, so they cannot reach a production site by mistake.
+
 ## Running
 
 ```sh

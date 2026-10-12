@@ -46,6 +46,14 @@ type env struct {
 	fake    *jiratest.Fake
 	secrets *secret.Memory
 	tty     *script
+	dev     bool // run as a development build instead of a release
+}
+
+func (e *env) version() string {
+	if e.dev {
+		return "v0.0.0-20261012100000-0123456789ab"
+	}
+	return "v9.9.9"
 }
 
 func newEnv(t *testing.T) *env {
@@ -76,7 +84,7 @@ func (e *env) run(t *testing.T, args ...string) (string, string, error) {
 func (e *env) runStdin(t *testing.T, stdin string, args ...string) (string, string, error) {
 	t.Helper()
 	var out, errOut bytes.Buffer
-	app := &App{Version: "test", In: strings.NewReader(stdin), Out: &out, Err: &errOut, TTY: e.tty, Secrets: e.secrets, Transport: e.fake.Transport(),
+	app := &App{Version: e.version(), In: strings.NewReader(stdin), Out: &out, Err: &errOut, TTY: e.tty, Secrets: e.secrets, Transport: e.fake.Transport(),
 		Now: func() time.Time { return time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC) }}
 	err := app.Execute(context.Background(), args)
 	return out.String(), errOut.String(), err
@@ -329,5 +337,87 @@ func TestDevBuildNeedsExplicitProfile(t *testing.T) {
 		if !isRelease(v) {
 			t.Errorf("%s should count as a release", v)
 		}
+	}
+}
+
+func profileHome(t *testing.T) {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("TIX_JIRA_CONFIG", "")
+	t.Setenv("TIX_JIRA_PROFILE", "")
+}
+
+func saveProfile(t *testing.T, e *env, name string, allowDev bool) {
+	t.Helper()
+	cfg := &config.Config{Site: e.fake.URL(), Email: "me@example.com", Privacy: config.PrivacyOwn, AllowDevBuilds: allowDev}
+	if err := cfg.Save(name); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.secrets.Set(secret.AccountKey(cfg.Site, cfg.Email), "tok-me"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDevBuildsStayAwayFromProduction(t *testing.T) {
+	e := newEnv(t)
+	profileHome(t)
+	saveProfile(t, e, "default", true) // even a hand-edited flag must not open the default profile
+	saveProfile(t, e, "test", false)
+	e.dev = true
+	before := len(e.fake.Requests)
+
+	for _, args := range [][]string{
+		{"mine", "--profile", "default"},
+		{"mine", "--profile", "test"},
+		{"mcp", "--profile", "default"},
+	} {
+		if _, _, err := e.run(t, args...); !errors.Is(err, errDevBuildNotAllowed) {
+			t.Errorf("%v: err = %v", args, err)
+		}
+	}
+	e.tty.secrets = []string{"tok-me"}
+	e.tty.answers = []string{""}
+	if _, _, err := e.run(t, "auth", "login", "--profile", "default", "--site", e.fake.URL(), "--email", "me@example.com"); !errors.Is(err, errDevBuildNotAllowed) {
+		t.Errorf("dev build login to default: %v", err)
+	}
+	if n := len(e.fake.Requests) - before; n != 0 {
+		t.Errorf("a development build sent %d requests to a profile it must not use", n)
+	}
+
+	saveProfile(t, e, "test", true)
+	if out, _, err := e.run(t, "mine", "--profile", "test"); err != nil || !strings.Contains(out, "PROJ-1") {
+		t.Errorf("opted-in test profile: %v %q", err, out)
+	}
+}
+
+func TestDevBuildsOptIn(t *testing.T) {
+	e := newEnv(t)
+	profileHome(t)
+	saveProfile(t, e, "default", false)
+	saveProfile(t, e, "test", false)
+	host := strings.TrimPrefix(e.fake.URL(), "https://")
+
+	if _, _, err := e.run(t, "config", "dev-builds", "on", "--profile", "default"); err == nil {
+		t.Error("default profile opted in")
+	}
+	e.tty.answers = []string{"yes"}
+	if _, _, err := e.run(t, "config", "dev-builds", "on", "--profile", "test"); err == nil {
+		t.Error("opted in without typing the host")
+	}
+	e.tty.answers = []string{host}
+	if _, _, err := e.run(t, "config", "dev-builds", "on", "--profile", "test"); err != nil {
+		t.Fatal(err)
+	}
+	if cfg, _ := config.Load("test"); !cfg.AllowDevBuilds {
+		t.Error("flag not saved")
+	}
+	e.tty.noTTY = true
+	if _, _, err := e.run(t, "config", "dev-builds", "on", "--profile", "default"); err == nil {
+		t.Error("default profile opted in without a terminal")
+	}
+	if _, _, err := e.run(t, "config", "dev-builds", "off", "--profile", "test"); err != nil {
+		t.Errorf("switching off needs no terminal: %v", err)
 	}
 }

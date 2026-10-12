@@ -32,6 +32,13 @@ func (a *App) authCmd() *cobra.Command {
 				return err
 			}
 			prev, _ := config.Load(prof)
+			// A development build may create a new profile, but must not log in to
+			// the default profile or to an existing profile that did not opt in.
+			if !isRelease(a.Version) && (prof == config.DefaultProfile || prev != nil) {
+				if err := a.checkDevBuild(prof, prev); err != nil {
+					return err
+				}
+			}
 			if site == "" {
 				if site, err = a.TTY.Prompt("Jira site (e.g. your-team.atlassian.net): "); err != nil {
 					return err
@@ -71,6 +78,7 @@ func (a *App) authCmd() *cobra.Command {
 			cfg := &config.Config{Site: site, Email: email, Privacy: config.PrivacyOwn, TokenExpiry: strings.TrimSpace(expires)}
 			if prev != nil {
 				cfg.Privacy = prev.Privacy
+				cfg.AllowDevBuilds = prev.AllowDevBuilds && prev.Site == cfg.Site
 			}
 			if err := cfg.Validate(); err != nil {
 				return err
@@ -177,7 +185,7 @@ func (a *App) configCmd() *cobra.Command {
 			}
 			path, _ := config.Path(prof)
 			return a.print(cmd, cfg, func() string {
-				return fmt.Sprintf("- Profile: %s\n- Site: %s\n- Email: %s\n- Privacy: %s\n- Token expiry: %s\n- File: %s\n", prof, cfg.Site, cfg.Email, cfg.Privacy, orDash(cfg.TokenExpiry), path)
+				return fmt.Sprintf("- Profile: %s\n- Site: %s\n- Email: %s\n- Privacy: %s\n- Token expiry: %s\n- Development builds: %v\n- File: %s\n", prof, cfg.Site, cfg.Email, cfg.Privacy, orDash(cfg.TokenExpiry), cfg.AllowDevBuilds, path)
 			})
 		},
 	}
@@ -244,6 +252,9 @@ func (a *App) configCmd() *cobra.Command {
 				line := fmt.Sprintf("%s %s", mark, n)
 				if cfg, err := config.Load(n); err == nil {
 					line += fmt.Sprintf(": %s (%s, privacy %s)", cfg.Site, cfg.Email, cfg.Privacy)
+					if cfg.AllowDevBuilds {
+						line += " [dev builds allowed]"
+					}
 				}
 				if _, err := fmt.Fprintln(a.Out, line); err != nil {
 					return err
@@ -252,7 +263,53 @@ func (a *App) configCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.AddCommand(show, privacy, profiles)
+	devBuilds := &cobra.Command{
+		Use:   "dev-builds on|off",
+		Short: "Allow development builds and integration tests to use this profile",
+		Long: "Development builds of tix (built from a checkout, e.g. tix-dev) refuse every profile unless it opted in here.\n" +
+			"Only opt in profiles for test sites. The default profile cannot opt in. Switching on must be confirmed in the terminal.",
+		Args:      cobra.ExactArgs(1),
+		ValidArgs: []string{"on", "off"},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			p, _ := cmd.Flags().GetString("profile")
+			if p == "" {
+				return errors.New("name the profile explicitly with --profile")
+			}
+			prof, err := config.ResolveProfile(p)
+			if err != nil {
+				return err
+			}
+			cfg, err := config.Load(prof)
+			if err != nil {
+				return err
+			}
+			switch strings.ToLower(args[0]) {
+			case "on":
+				if prof == config.DefaultProfile {
+					return errors.New("the default profile is meant for production and cannot allow development builds")
+				}
+				host := strings.TrimPrefix(cfg.Site, "https://")
+				answer, err := a.TTY.Prompt(target(cfg.Site, prof) + "\n\nDevelopment builds and integration tests will be able to read and change tickets on this site.\nOnly do this for a test site. Type " + host + " to confirm: ")
+				if err != nil {
+					return err
+				}
+				if answer != host {
+					return errors.New("not confirmed; nothing was changed")
+				}
+				cfg.AllowDevBuilds = true
+			case "off":
+				cfg.AllowDevBuilds = false
+			default:
+				return fmt.Errorf("use on or off, not %q", args[0])
+			}
+			if err := cfg.Save(prof); err != nil {
+				return err
+			}
+			_, err = fmt.Fprintf(a.Out, "Development builds on profile %s: %v.\n", prof, cfg.AllowDevBuilds)
+			return err
+		},
+	}
+	cmd.AddCommand(show, privacy, profiles, devBuilds)
 	return cmd
 }
 

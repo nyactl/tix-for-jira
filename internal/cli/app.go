@@ -113,6 +113,20 @@ func isRelease(v string) bool {
 	return releaseRe.MatchString(v) && !pseudoRe.MatchString(v)
 }
 
+var errDevBuildNotAllowed = errors.New("development builds may only use profiles that opted in with `config dev-builds on`; the default profile never can")
+
+// checkDevBuild keeps development builds away from production: they may only
+// use a non-default profile that explicitly allows them.
+func (a *App) checkDevBuild(prof string, cfg *config.Config) error {
+	if isRelease(a.Version) {
+		return nil
+	}
+	if prof == config.DefaultProfile || cfg == nil || !cfg.AllowDevBuilds {
+		return fmt.Errorf("%w (profile %s)", errDevBuildNotAllowed, prof)
+	}
+	return nil
+}
+
 // profile returns the selected profile name. Development builds must name
 // one explicitly.
 func (a *App) profile(cmd *cobra.Command) (string, error) {
@@ -137,6 +151,9 @@ func (a *App) service(cmd *cobra.Command) (*core.Service, *config.Config, error)
 	}
 	cfg, err := config.Load(prof)
 	if err != nil {
+		return nil, nil, err
+	}
+	if err := a.checkDevBuild(prof, cfg); err != nil {
 		return nil, nil, err
 	}
 	if w := cfg.ExpiryWarning(a.Now()); w != "" {

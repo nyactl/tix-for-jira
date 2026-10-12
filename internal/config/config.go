@@ -30,6 +30,10 @@ type Config struct {
 	Email       string      `json:"email"`
 	Privacy     PrivacyMode `json:"privacy"`
 	TokenExpiry string      `json:"tokenExpiry,omitempty"` // YYYY-MM-DD
+	// AllowDevBuilds lets development builds and the integration tests use
+	// this profile. It is never allowed for the default profile, which is
+	// meant for production.
+	AllowDevBuilds bool `json:"allowDevBuilds,omitempty"`
 }
 
 // ErrNotConfigured is returned by Load when no login has happened yet.

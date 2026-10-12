@@ -114,7 +114,7 @@ make dev                                                    # development build:
 tix-dev --profile test mine
 ```
 
-Development builds refuse to run unless a profile is chosen explicitly (`--profile` or `TIX_JIRA_PROFILE`), so work in progress cannot reach production by accident. macOS asks for Keychain access again after each rebuild, because the binary changed.
+Development builds refuse to run unless a profile is chosen explicitly (`--profile` or `TIX_JIRA_PROFILE`) and that profile has opted in with `tix config dev-builds on --profile test` (confirmed in the terminal). The default profile can never opt in, so work in progress cannot reach production by accident. macOS asks for Keychain access again after each rebuild, because the binary changed.
 
 ## Privacy modes
 

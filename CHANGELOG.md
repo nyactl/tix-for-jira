@@ -4,6 +4,10 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ## Unreleased
 
+### Added
+
+- `tix config dev-builds on|off`: development builds and the integration tests only use profiles that opted in; the default profile never can.
+
 ## [0.1.1] - 2026-10-09
 
 ### Added
