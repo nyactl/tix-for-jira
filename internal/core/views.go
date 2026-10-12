@@ -58,6 +58,7 @@ type IssueDetail struct {
 	Parent       *Related         `json:"parent,omitempty"`
 	Subtasks     []Related        `json:"subtasks,omitempty"`
 	Links        []Related        `json:"links,omitempty"`
+	WebLinks     []WebLink        `json:"webLinks,omitempty"`
 	Attachments  []AttachmentInfo `json:"attachments,omitempty"`
 	TimeTracking *TimeTracking    `json:"timeTracking,omitempty"`
 	FixVersions  []string         `json:"fixVersions,omitempty"`
@@ -164,4 +165,9 @@ type BoardIssues struct {
 	Sprint *SprintView    `json:"sprint,omitempty"`
 	Issues []IssueSummary `json:"issues"`
 	Total  int            `json:"total"`
+}
+
+type WebLink struct {
+	Title string `json:"title"`
+	URL   string `json:"url"`
 }

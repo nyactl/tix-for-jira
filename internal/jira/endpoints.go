@@ -455,3 +455,33 @@ func (c *Client) AddAttachment(ctx context.Context, key, filename string, data [
 	}
 	return &out[0], nil
 }
+
+// RemoteLink is a web link on an issue.
+type RemoteLink struct {
+	ID     int `json:"id"`
+	Object struct {
+		URL   string `json:"url"`
+		Title string `json:"title"`
+	} `json:"object"`
+}
+
+func (c *Client) RemoteLinks(ctx context.Context, key string) ([]RemoteLink, error) {
+	p, err := issuePath(key, "/remotelink")
+	if err != nil {
+		return nil, err
+	}
+	var out []RemoteLink
+	if err := c.do(ctx, http.MethodGet, p, nil, nil, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *Client) AddRemoteLink(ctx context.Context, key, linkURL, title string) error {
+	p, err := issuePath(key, "/remotelink")
+	if err != nil {
+		return err
+	}
+	body := map[string]any{"object": map[string]string{"url": linkURL, "title": title}}
+	return c.do(ctx, http.MethodPost, p, nil, body, nil)
+}

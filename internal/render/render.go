@@ -124,6 +124,12 @@ func Issue(d *core.IssueDetail) string {
 			line(&b, "- %s", related(r))
 		}
 	}
+	if len(d.WebLinks) > 0 {
+		line(&b, "\n## Web links")
+		for _, l := range d.WebLinks {
+			line(&b, "- %s: %s", or(l.Title, "(no title)"), l.URL)
+		}
+	}
 	if len(d.Attachments) > 0 {
 		line(&b, "\n## Attachments")
 		for _, a := range d.Attachments {

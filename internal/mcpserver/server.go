@@ -123,6 +123,12 @@ type projectInput struct {
 	Project string `json:"project" jsonschema:"Project key"`
 }
 
+type webLinkInput struct {
+	Key   string `json:"key" jsonschema:"Ticket key, e.g. PROJ-123"`
+	URL   string `json:"url" jsonschema:"http or https URL"`
+	Title string `json:"title,omitempty" jsonschema:"Link text; defaults to the URL"`
+}
+
 type attachInput struct {
 	Key  string `json:"key" jsonschema:"Ticket key, e.g. PROJ-123"`
 	Path string `json:"path" jsonschema:"Absolute path of a local file the user named; hidden files and folders are refused"`
@@ -407,6 +413,11 @@ func (s *server) registerWrites(srv *mcp.Server) {
 		func(ctx context.Context, req *mcp.CallToolRequest, in keyInput) (*mcp.CallToolResult, any, error) {
 			p, err := s.svc.PlanWatch(ctx, in.Key, false)
 			return s.approveThenApply(ctx, req, "unwatch_issue", in, p, err)
+		})
+	add(srv, "add_web_link", "Add a web link (http or https) to a ticket. The user approves it first.", writeAnnotations(core.Additive),
+		func(ctx context.Context, req *mcp.CallToolRequest, in webLinkInput) (*mcp.CallToolResult, any, error) {
+			p, err := s.svc.PlanWebLink(ctx, in.Key, in.URL, in.Title)
+			return s.approveThenApply(ctx, req, "add_web_link", in, p, err)
 		})
 	add(srv, "attach_file", "Upload a local file the user named to a ticket. The user approves the file name, size and path first.", writeAnnotations(core.Additive),
 		func(ctx context.Context, req *mcp.CallToolRequest, in attachInput) (*mcp.CallToolResult, any, error) {

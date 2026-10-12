@@ -54,6 +54,11 @@ type Attachment struct {
 	Data                                    []byte
 }
 
+type RemoteLink struct {
+	ID         int
+	URL, Title string
+}
+
 type Link struct {
 	ID, Type, Outward, Inward string // "Outward <outward phrase> Inward"
 }
@@ -75,6 +80,7 @@ type Issue struct {
 	Attachments                                   []Attachment
 	Watchers                                      []string // account IDs
 	Sprint                                        int      // 0: backlog
+	RemoteLinks                                   []RemoteLink
 }
 
 // Fake is the fake Jira site.
@@ -512,6 +518,23 @@ func (f *Fake) issueRoute(w http.ResponseWriter, r *http.Request, i *Issue, sub 
 		writeJSON(w, 200, f.issueJSON(i, r.URL.Query().Get("expand") == "names", me))
 	case " PUT":
 		f.edit(w, i, body)
+	case "/remotelink GET":
+		out := []any{}
+		for _, rl := range i.RemoteLinks {
+			out = append(out, map[string]any{"id": rl.ID, "object": map[string]string{"url": rl.URL, "title": rl.Title}})
+		}
+		writeJSON(w, 200, out)
+	case "/remotelink POST":
+		obj, _ := body["object"].(map[string]any)
+		u, _ := obj["url"].(string)
+		title, _ := obj["title"].(string)
+		if u == "" || title == "" {
+			errJSON(w, 400, "url and title are required")
+			return
+		}
+		rl := RemoteLink{ID: 10000 + len(i.RemoteLinks), URL: u, Title: title}
+		i.RemoteLinks = append(i.RemoteLinks, rl)
+		writeJSON(w, 201, map[string]any{"id": rl.ID})
 	case "/watchers POST":
 		id, _ := body["accountId"].(string)
 		if id != me.AccountID {

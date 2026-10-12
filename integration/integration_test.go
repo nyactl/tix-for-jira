@@ -320,6 +320,25 @@ func TestIntegration(t *testing.T) {
 		}
 	})
 
+	t.Run("web link", func(t *testing.T) {
+		link := "https://example.com/tix-for-jira/" + s.run
+		applied(t)(s.svc.PlanWebLink(ctx, b, link, "tix web link "+s.run))
+		d, err := s.svc.Issue(ctx, b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for _, l := range d.WebLinks {
+			found = found || (l.URL == link && l.Title == "tix web link "+s.run)
+		}
+		if !found {
+			t.Errorf("web links = %+v", d.WebLinks)
+		}
+		if _, err := s.svc.PlanWebLink(ctx, b, link, ""); err == nil {
+			t.Error("duplicate web link was accepted")
+		}
+	})
+
 	t.Run("subtask", func(t *testing.T) {
 		types, err := s.svc.IssueTypes(ctx, s.project)
 		if err != nil {

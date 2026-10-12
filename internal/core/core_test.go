@@ -870,3 +870,53 @@ func TestPlanAttach(t *testing.T) {
 		t.Errorf("refused uploads changed the ticket: %d attachments", n)
 	}
 }
+
+func TestWebLinks(t *testing.T) {
+	t.Parallel()
+	f := fixture(t)
+	f.Issues["PROJ-1"].RemoteLinks = []jiratest.RemoteLink{
+		{ID: 1, URL: "https://wiki.example.com/spec", Title: "Spec by Alice Smith"},
+		{ID: 2, URL: "javascript:alert(1)", Title: "trap"},
+	}
+	s := service(t, f, config.PrivacyOwn)
+	ctx := context.Background()
+
+	d, err := s.Issue(ctx, "PROJ-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d.WebLinks) != 1 || d.WebLinks[0].URL != "https://wiki.example.com/spec" || d.WebLinks[0].Title != "Spec by Person A" {
+		t.Errorf("web links = %+v", d.WebLinks)
+	}
+
+	p, err := s.PlanWebLink(ctx, "PROJ-1", "https://ci.example.com/run/7", "CI run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Kind != Additive || !strings.Contains(p.Description, "CI run\n    https://ci.example.com/run/7") {
+		t.Errorf("description = %q", p.Description)
+	}
+	assertNoPersonalData(t, p.Description)
+	if _, err := p.Apply(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if p, err := s.PlanWebLink(ctx, "PROJ-1", "https://ci.example.com/run/8", ""); err != nil || !strings.Contains(p.Description, "https://ci.example.com/run/8\n    https://ci.example.com/run/8") {
+		t.Errorf("default title: %+v, %v", p, err)
+	}
+	d, _ = s.Issue(ctx, "PROJ-1")
+	if len(d.WebLinks) != 2 || d.WebLinks[1].Title != "CI run" {
+		t.Errorf("after add = %+v", d.WebLinks)
+	}
+
+	for _, tc := range []struct{ key, url, title, want string }{
+		{"PROJ-1", "javascript:alert(1)", "", "http or https"},
+		{"PROJ-1", "ci.example.com/run/7", "", "http or https"},
+		{"PROJ-1", "https://ci.example.com/run/7", "again", "already links"},
+		{"PROJ-1", "https://x.example.com", strings.Repeat("a", 256), "longer than 255"},
+		{"PROJ-2", "https://x.example.com", "", ErrNotFound.Error()},
+	} {
+		if _, err := s.PlanWebLink(ctx, tc.key, tc.url, tc.title); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s %s: err = %v, want %q", tc.key, tc.url, err, tc.want)
+		}
+	}
+}

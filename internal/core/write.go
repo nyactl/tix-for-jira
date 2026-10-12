@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/nyactl/tix-for-jira/internal/config"
 	"github.com/nyactl/tix-for-jira/internal/jira"
@@ -761,4 +762,44 @@ func formatBytes(n int64) string {
 		return fmt.Sprintf("%.1f KiB", float64(n)/(1<<10))
 	}
 	return fmt.Sprintf("%d bytes", n)
+}
+
+const maxWebLinkTitle = 255
+
+// PlanWebLink prepares adding a web link; title defaults to the URL.
+func (s *Service) PlanWebLink(ctx context.Context, key, linkURL, title string) (*Plan, error) {
+	linkURL, title = strings.TrimSpace(linkURL), strings.TrimSpace(title)
+	if !isWebURL(linkURL) {
+		return nil, fmt.Errorf("a web link needs an http or https URL, got %q", linkURL)
+	}
+	if title == "" {
+		title = linkURL
+	}
+	if utf8.RuneCountInString(title) > maxWebLinkTitle {
+		return nil, fmt.Errorf("the title is longer than %d characters", maxWebLinkTitle)
+	}
+	issue, err := s.scoped(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	existing, err := s.jc.RemoteLinks(ctx, issue.Key)
+	if err != nil {
+		return nil, err
+	}
+	for _, rl := range existing {
+		if rl.Object.URL == linkURL {
+			return nil, fmt.Errorf("%s already links to %s", issue.Key, linkURL)
+		}
+	}
+	return &Plan{
+		Kind:        Additive,
+		Key:         issue.Key,
+		Description: fmt.Sprintf("Add a web link to %s:\n\n    %s\n    %s", s.people.Text(headline(issue)), title, linkURL),
+		apply: func(ctx context.Context) (string, error) {
+			if err := s.jc.AddRemoteLink(ctx, issue.Key, linkURL, title); err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("Added web link %s to %s.", linkURL, issue.Key), nil
+		},
+	}, nil
 }

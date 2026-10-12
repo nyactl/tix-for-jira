@@ -164,8 +164,7 @@ func (s *Service) convert(ctx context.Context, k kind, m jira.FieldMeta, input s
 	case kindText:
 		return input, nil
 	case kindURL:
-		u, err := url.Parse(input)
-		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+		if !isWebURL(input) {
 			return nil, fmt.Errorf("%s needs an http or https URL, got %q", m.Name, input)
 		}
 		return input, nil
@@ -354,4 +353,9 @@ func (s *Service) teamValue(ctx context.Context, m jira.FieldMeta, input string)
 		return nil, fmt.Errorf("%s: no team named %q", m.Name, input)
 	}
 	return nil, fmt.Errorf("%s: no team named exactly %q; similar: %s", m.Name, input, strings.Join(names, ", "))
+}
+
+func isWebURL(s string) bool {
+	u, err := url.Parse(s)
+	return err == nil && (u.Scheme == "https" || u.Scheme == "http") && u.Host != ""
 }
