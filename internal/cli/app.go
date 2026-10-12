@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/nyactl/approvekit/atlassian"
 	"io"
 	"net/http"
 	"os"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/nyactl/approvekit/atlassian"
 	"github.com/nyactl/approvekit/keychain"
 	"github.com/nyactl/approvekit/profile"
 	"github.com/nyactl/approvekit/sanitize"

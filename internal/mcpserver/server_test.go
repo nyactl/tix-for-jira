@@ -2,7 +2,6 @@ package mcpserver
 
 import (
 	"context"
-	"github.com/nyactl/approvekit/atlassian"
 	"os"
 	"path/filepath"
 	"slices"
@@ -10,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/nyactl/approvekit/atlassian"
 	"github.com/nyactl/tix-for-jira/internal/config"
 	"github.com/nyactl/tix-for-jira/internal/core"
 	"github.com/nyactl/tix-for-jira/internal/jira"
