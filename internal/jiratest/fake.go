@@ -64,6 +64,7 @@ type Issue struct {
 	Changes                                       []Change
 	Worklogs                                      []Worklog
 	Attachments                                   []Attachment
+	Watchers                                      []string // account IDs
 }
 
 // Fake is the fake Jira site.
@@ -267,6 +268,11 @@ func (f *Fake) serve(w http.ResponseWriter, r *http.Request) {
 	if r.Body != nil && (r.Method == http.MethodPost || r.Method == http.MethodPut) {
 		data, _ := io.ReadAll(r.Body)
 		_ = json.Unmarshal(data, &body)
+		// Adding a watcher takes a bare JSON string.
+		var accountID string
+		if json.Unmarshal(data, &accountID) == nil {
+			body = map[string]any{"accountId": accountID}
+		}
 	}
 	p := r.URL.Path
 	switch {
@@ -341,7 +347,7 @@ func (f *Fake) search(w http.ResponseWriter, r *http.Request, me *User) {
 	end := min(start+size, len(keys))
 	var issues []any
 	for _, k := range keys[start:end] {
-		issues = append(issues, f.issueJSON(f.Issues[k], false))
+		issues = append(issues, f.issueJSON(f.Issues[k], false, me))
 	}
 	resp := map[string]any{"issues": issues, "isLast": end >= len(keys)}
 	if end < len(keys) {
@@ -363,7 +369,7 @@ func (f *Fake) related(key string) any {
 	}}
 }
 
-func (f *Fake) issueJSON(i *Issue, names bool) map[string]any {
+func (f *Fake) issueJSON(i *Issue, names bool, me *User) map[string]any {
 	st := statuses[i.Status]
 	fields := map[string]any{
 		"summary":     i.Summary,
@@ -398,6 +404,7 @@ func (f *Fake) issueJSON(i *Issue, names bool) map[string]any {
 	if i.Environment != nil {
 		fields["environment"] = i.Environment
 	}
+	fields["watches"] = map[string]any{"watchCount": len(i.Watchers), "isWatching": slices.Contains(i.Watchers, me.AccountID)}
 	if i.Parent != "" {
 		fields["parent"] = f.related(i.Parent)
 	}
@@ -468,9 +475,22 @@ func linkTypeByName(name string) struct{ id, name, outward, inward string } {
 func (f *Fake) issueRoute(w http.ResponseWriter, r *http.Request, i *Issue, sub string, body map[string]any, me *User) {
 	switch sub + " " + r.Method {
 	case " GET":
-		writeJSON(w, 200, f.issueJSON(i, r.URL.Query().Get("expand") == "names"))
+		writeJSON(w, 200, f.issueJSON(i, r.URL.Query().Get("expand") == "names", me))
 	case " PUT":
 		f.edit(w, i, body)
+	case "/watchers POST":
+		id, _ := body["accountId"].(string)
+		if id != me.AccountID {
+			errJSON(w, 403, "only yourself")
+			return
+		}
+		if !slices.Contains(i.Watchers, id) {
+			i.Watchers = append(i.Watchers, id)
+		}
+		w.WriteHeader(204)
+	case "/watchers DELETE":
+		i.Watchers = slices.DeleteFunc(i.Watchers, func(a string) bool { return a == r.URL.Query().Get("accountId") })
+		w.WriteHeader(204)
 	case "/assignee PUT":
 		i.Assignee, _ = body["accountId"].(string)
 		w.WriteHeader(204)

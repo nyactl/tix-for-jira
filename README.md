@@ -59,6 +59,7 @@ tix log PROJ-123 1h30m --started 09:00 --comment "Code review"
 tix create --project PROJ --type Task --summary "Follow-up" --description -   # description from stdin
 tix link PROJ-123 "is blocked by" PROJ-124
 tix take PROJ-130                  # assign an unassigned ticket to yourself
+tix watch PROJ-123                 # and tix unwatch PROJ-123
 ```
 
 Add `--json` to any read command for machine-readable output. `tix help <command>` explains every option.
@@ -88,7 +89,7 @@ No credentials go into the client configuration; tix-for-jira reads them from it
 
 | Read tools | Write tools (with `--allow-writes`) |
 |---|---|
-| `whoami`, `my_issues`, `search_issues`, `get_issue`, `list_comments`, `get_history`, `list_worklogs`, `list_transitions`, `list_editable_fields`, `get_attachment`, `list_link_types`, `list_projects`, `list_issue_types` | `add_comment`, `update_fields`, `transition_issue`, `create_issue`, `log_work`, `link_issues`, `assign_to_me` |
+| `whoami`, `my_issues`, `search_issues`, `get_issue`, `list_comments`, `get_history`, `list_worklogs`, `list_transitions`, `list_editable_fields`, `get_attachment`, `list_link_types`, `list_projects`, `list_issue_types` | `add_comment`, `update_fields`, `transition_issue`, `create_issue`, `log_work`, `link_issues`, `assign_to_me`, `watch_issue`, `unwatch_issue` |
 
 Every tool carries `readOnlyHint` / `destructiveHint` annotations.
 

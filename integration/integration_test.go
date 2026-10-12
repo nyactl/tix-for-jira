@@ -535,6 +535,33 @@ func TestIntegration(t *testing.T) {
 		}
 	})
 
+	t.Run("watch and unwatch", func(t *testing.T) {
+		d, err := s.svc.Issue(ctx, b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Jira usually makes the creator a watcher.
+		if d.Watching {
+			applied(t)(s.svc.PlanWatch(ctx, b, false))
+			if d, _ = s.svc.Issue(ctx, b); d.Watching {
+				t.Fatal("still watching after unwatch")
+			}
+		}
+		before := d.Watchers
+		applied(t)(s.svc.PlanWatch(ctx, b, true))
+		d, _ = s.svc.Issue(ctx, b)
+		if !d.Watching || d.Watchers != before+1 {
+			t.Errorf("after watch: watching=%v watchers=%d (before %d)", d.Watching, d.Watchers, before)
+		}
+		if _, err := s.svc.PlanWatch(ctx, b, true); err == nil {
+			t.Error("watching twice was accepted")
+		}
+		applied(t)(s.svc.PlanWatch(ctx, b, false))
+		if d, _ = s.svc.Issue(ctx, b); d.Watching || d.Watchers != before {
+			t.Errorf("after unwatch: watching=%v watchers=%d", d.Watching, d.Watchers)
+		}
+	})
+
 	t.Run("worklog with start time", func(t *testing.T) {
 		start := time.Now().Add(-2 * time.Hour).Format("2006-01-02 15:04")
 		applied(t)(s.svc.PlanWorklog(ctx, a, "30m", start, ""))

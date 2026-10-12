@@ -772,3 +772,50 @@ func TestPlanTake(t *testing.T) {
 		t.Errorf("off mode: %v, %v", p, err)
 	}
 }
+
+func TestPlanWatch(t *testing.T) {
+	t.Parallel()
+	f := fixture(t)
+	f.Issues["PROJ-1"].Watchers = []string{"acc-alice"}
+	s := service(t, f, config.PrivacyOwn)
+	ctx := context.Background()
+
+	d, err := s.Issue(ctx, "PROJ-1")
+	if err != nil || d.Watchers != 1 || d.Watching {
+		t.Fatalf("before: %+v, %v", d, err)
+	}
+	if _, err := s.PlanWatch(ctx, "PROJ-1", false); err == nil || !strings.Contains(err.Error(), "do not watch") {
+		t.Errorf("unwatch when not watching: %v", err)
+	}
+	p, err := s.PlanWatch(ctx, "PROJ-1", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Kind != Additive || !strings.HasPrefix(p.Description, "Watch PROJ-1 (") {
+		t.Errorf("plan = %+v", p)
+	}
+	assertNoPersonalData(t, p.Description)
+	if _, err := p.Apply(ctx); err != nil {
+		t.Fatal(err)
+	}
+	d, _ = s.Issue(ctx, "PROJ-1")
+	if d.Watchers != 2 || !d.Watching {
+		t.Errorf("after watch: watchers=%d watching=%v", d.Watchers, d.Watching)
+	}
+	if _, err := s.PlanWatch(ctx, "PROJ-1", true); err == nil || !strings.Contains(err.Error(), "already watch") {
+		t.Errorf("watch twice: %v", err)
+	}
+	p, err = s.PlanWatch(ctx, "PROJ-1", false)
+	if err != nil || p.Kind != Destructive {
+		t.Fatalf("unwatch plan: %+v, %v", p, err)
+	}
+	if _, err := p.Apply(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if w := f.Issues["PROJ-1"].Watchers; len(w) != 1 || w[0] != "acc-alice" {
+		t.Errorf("watchers = %v, want only the other watcher left", w)
+	}
+	if _, err := s.PlanWatch(ctx, "PROJ-2", true); !errors.Is(err, ErrNotFound) {
+		t.Errorf("watch out of scope: %v", err)
+	}
+}

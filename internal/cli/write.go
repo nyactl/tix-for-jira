@@ -215,5 +215,23 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 		},
 	}
 
-	root.AddCommand(comment, update, transition, create, logWork, link, take)
+	watchCmd := func(use, short string, watch bool) *cobra.Command {
+		return &cobra.Command{
+			Use:   use + " <key>",
+			Short: short,
+			Args:  cobra.ExactArgs(1),
+			RunE: func(cmd *cobra.Command, args []string) error {
+				svc, _, err := a.service(cmd)
+				if err != nil {
+					return err
+				}
+				p, err := svc.PlanWatch(cmd.Context(), args[0], watch)
+				return a.apply(cmd, svc, p, err)
+			},
+		}
+	}
+
+	root.AddCommand(comment, update, transition, create, logWork, link, take,
+		watchCmd("watch", "Watch a ticket to get its notifications", true),
+		watchCmd("unwatch", "Stop watching a ticket", false))
 }

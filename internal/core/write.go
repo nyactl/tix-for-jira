@@ -665,3 +665,36 @@ func (s *Service) PlanTake(ctx context.Context, key string) (*Plan, error) {
 		},
 	}, nil
 }
+
+// PlanWatch prepares watching (watch true) or unwatching a ticket as the
+// user. Other watchers are neither listed nor changed.
+func (s *Service) PlanWatch(ctx context.Context, key string, watch bool) (*Plan, error) {
+	issue, err := s.scoped(ctx, key, "watches")
+	if err != nil {
+		return nil, err
+	}
+	watching := issue.Fields.Watches != nil && issue.Fields.Watches.IsWatching
+	if watching == watch {
+		if watch {
+			return nil, fmt.Errorf("you already watch %s", issue.Key)
+		}
+		return nil, fmt.Errorf("you do not watch %s", issue.Key)
+	}
+	verb, done := "Stop watching", "You no longer watch %s."
+	change := s.jc.Unwatch
+	kind := Destructive
+	if watch {
+		verb, done, change, kind = "Watch", "You now watch %s.", s.jc.Watch, Additive
+	}
+	return &Plan{
+		Kind:        kind,
+		Key:         issue.Key,
+		Description: fmt.Sprintf("%s %s.", verb, s.people.Text(headline(issue))),
+		apply: func(ctx context.Context) (string, error) {
+			if err := change(ctx, issue.Key, s.people.MeID()); err != nil {
+				return "", err
+			}
+			return fmt.Sprintf(done, issue.Key), nil
+		},
+	}, nil
+}
