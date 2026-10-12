@@ -419,6 +419,27 @@ func TestIntegration(t *testing.T) {
 		}
 	})
 
+	t.Run("move under another parent", func(t *testing.T) {
+		msg := applied(t)(s.svc.PlanCreate(ctx, core.CreateInput{Project: s.project, Type: "Epic", Summary: "tix-for-jira integration epic " + s.run, Labels: []string{"tix-for-jira-it"}}))
+		var epic string
+		if _, err := fmt.Sscanf(msg, "Created %s", &epic); err != nil {
+			t.Fatalf("unexpected create result %q", msg)
+		}
+		epic = strings.TrimSuffix(epic, ":")
+		closeWhenDone(t, s.jc, epic)
+		applied(t)(s.svc.PlanUpdate(ctx, b, []core.FieldInput{{Field: "Parent", Value: epic}}))
+		d, err := s.svc.Issue(ctx, b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if d.Parent == nil || d.Parent.Key != epic {
+			t.Errorf("parent = %+v, want %s", d.Parent, epic)
+		}
+		if _, err := s.svc.PlanUpdate(ctx, b, []core.FieldInput{{Field: "Parent", Value: s.other}}); !errors.Is(err, core.ErrNotFound) {
+			t.Errorf("moving under someone else's ticket: %v", err)
+		}
+	})
+
 	t.Run("worklog with start time", func(t *testing.T) {
 		start := time.Now().Add(-2 * time.Hour).Format("2006-01-02 15:04")
 		applied(t)(s.svc.PlanWorklog(ctx, a, "30m", start, ""))

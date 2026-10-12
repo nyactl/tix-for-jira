@@ -111,6 +111,31 @@ func (s *Service) PlanUpdate(ctx context.Context, key string, changes []FieldInp
 	fields := map[string]any{}
 	var lines []string
 	for _, ch := range changes {
+		if strings.EqualFold(strings.TrimSpace(ch.Field), "parent") {
+			if _, has := meta["parent"]; !has {
+				return nil, fmt.Errorf("the parent of %s cannot be changed", issue.Key)
+			}
+			if _, dup := fields["parent"]; dup {
+				return nil, errors.New("the parent is listed twice")
+			}
+			if strings.TrimSpace(ch.Value) == "" {
+				return nil, errors.New("removing the parent is not supported; move the ticket under another parent instead")
+			}
+			parent, err := s.scoped(ctx, ch.Value)
+			if err != nil {
+				return nil, fmt.Errorf("parent %s: %w", ch.Value, err)
+			}
+			if parent.Key == issue.Key {
+				return nil, errors.New("a ticket cannot be its own parent")
+			}
+			fields["parent"] = map[string]string{"key": parent.Key}
+			old := ""
+			if issue.Fields.Parent != nil {
+				old = issue.Fields.Parent.Key
+			}
+			lines = append(lines, fmt.Sprintf("- Parent:\n    from: %s\n    to:   %s", describe(old), describe(s.people.Text(headline(parent)))))
+			continue
+		}
 		id, m, err := findField(meta, ch.Field)
 		if err != nil {
 			return nil, err

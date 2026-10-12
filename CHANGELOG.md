@@ -8,6 +8,7 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 - `tix config dev-builds on|off`: development builds and the integration tests only use profiles that opted in; the default profile never can.
 - Ticket details show fix versions, affects versions and the environment.
+- Tickets can be moved under another parent or epic of your own (`--set Parent=PROJ-7`).
 
 ## [0.1.1] - 2026-10-09
 
