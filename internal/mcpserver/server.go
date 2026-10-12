@@ -345,4 +345,14 @@ func (s *server) registerWrites(srv *mcp.Server) {
 			p, err := s.svc.PlanTake(ctx, in.Key)
 			return s.approveThenApply(ctx, req, "assign_to_me", in, p, err)
 		})
+	add(srv, "watch_issue", "Watch a ticket, so the user gets its notifications. The user approves it first.", writeAnnotations(core.Additive),
+		func(ctx context.Context, req *mcp.CallToolRequest, in keyInput) (*mcp.CallToolResult, any, error) {
+			p, err := s.svc.PlanWatch(ctx, in.Key, true)
+			return s.approveThenApply(ctx, req, "watch_issue", in, p, err)
+		})
+	add(srv, "unwatch_issue", "Stop watching a ticket. The user approves it first.", writeAnnotations(core.Destructive),
+		func(ctx context.Context, req *mcp.CallToolRequest, in keyInput) (*mcp.CallToolResult, any, error) {
+			p, err := s.svc.PlanWatch(ctx, in.Key, false)
+			return s.approveThenApply(ctx, req, "unwatch_issue", in, p, err)
+		})
 }

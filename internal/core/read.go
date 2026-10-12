@@ -206,6 +206,9 @@ func (s *Service) Issue(ctx context.Context, key string) (*IssueDetail, error) {
 	}
 	d.Description = s.markdown(f.Description)
 	d.Environment = s.markdown(f.Environment)
+	if f.Watches != nil {
+		d.Watchers, d.Watching = f.Watches.WatchCount, f.Watches.IsWatching
+	}
 	if f.Parent != nil {
 		r := s.related("parent", f.Parent)
 		d.Parent = &r

@@ -89,6 +89,11 @@ func Issue(d *core.IssueDetail) string {
 		line(&b, "- Affects versions: %s", strings.Join(d.Affects, ", "))
 	}
 	line(&b, "- Created: %s, updated: %s", d.Created, d.Updated)
+	if d.Watching {
+		line(&b, "- Watchers: %d (including you)", d.Watchers)
+	} else {
+		line(&b, "- Watchers: %d (not you)", d.Watchers)
+	}
 	if tt := d.TimeTracking; tt != nil {
 		line(&b, "- Time: estimate %s, remaining %s, spent %s", or(tt.Original, "-"), or(tt.Remaining, "-"), or(tt.Spent, "-"))
 	}

@@ -389,6 +389,24 @@ func (c *Client) AssignIssue(ctx context.Context, key, accountID string) error {
 	return c.do(ctx, http.MethodPut, p, nil, map[string]string{"accountId": accountID}, nil)
 }
 
+// Watch adds the account as a watcher.
+func (c *Client) Watch(ctx context.Context, key, accountID string) error {
+	p, err := issuePath(key, "/watchers")
+	if err != nil {
+		return err
+	}
+	return c.do(ctx, http.MethodPost, p, nil, accountID, nil)
+}
+
+// Unwatch removes the account from the watchers.
+func (c *Client) Unwatch(ctx context.Context, key, accountID string) error {
+	p, err := issuePath(key, "/watchers")
+	if err != nil {
+		return err
+	}
+	return c.do(ctx, http.MethodDelete, p, url.Values{"accountId": {accountID}}, nil, nil)
+}
+
 // Suggestion is a JQL autocomplete suggestion for a field value.
 type Suggestion struct {
 	Value       string `json:"value"`

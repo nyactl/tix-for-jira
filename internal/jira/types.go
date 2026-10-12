@@ -109,6 +109,14 @@ type Fields struct {
 	FixVersions  []Named         `json:"fixVersions"`
 	Versions     []Named         `json:"versions"`
 	Environment  json.RawMessage `json:"environment"`
+	Watches      *Watches        `json:"watches"`
+}
+
+// Watches is the watch summary embedded in an issue; it never lists the
+// watchers themselves.
+type Watches struct {
+	WatchCount int  `json:"watchCount"`
+	IsWatching bool `json:"isWatching"`
 }
 
 // Issue keeps both the typed system fields and every raw field value, so

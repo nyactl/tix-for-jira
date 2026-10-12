@@ -63,6 +63,8 @@ type IssueDetail struct {
 	FixVersions  []string         `json:"fixVersions,omitempty"`
 	Affects      []string         `json:"affectsVersions,omitempty"`
 	Environment  string           `json:"environment,omitempty"`
+	Watchers     int              `json:"watchers"`
+	Watching     bool             `json:"watching"`
 	Fields       []FieldValue     `json:"fields,omitempty"`
 }
 
