@@ -542,3 +542,54 @@ func TestIssueShowsVersionsAndEnvironment(t *testing.T) {
 		t.Errorf("environment = %q", d.Environment)
 	}
 }
+
+func TestPlanUpdateParent(t *testing.T) {
+	t.Parallel()
+	f := fixture(t)
+	s := service(t, f, config.PrivacyOwn)
+	ctx := context.Background()
+
+	fs, _ := s.EditableFields(ctx, "PROJ-3")
+	hasParent := false
+	for _, fv := range fs {
+		hasParent = hasParent || fv.ID == "parent"
+	}
+	if !hasParent {
+		t.Errorf("parent not listed as editable: %+v", fs)
+	}
+
+	p, err := s.PlanUpdate(ctx, "PROJ-3", []FieldInput{{"Parent", "proj-1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Kind != Destructive || !strings.Contains(p.Description, "from: (empty)") || !strings.Contains(p.Description, `to:   "PROJ-1 (Fix login for Person A)"`) {
+		t.Errorf("description:\n%s", p.Description)
+	}
+	assertNoPersonalData(t, p.Description)
+	if _, err := p.Apply(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if f.Issues["PROJ-3"].Parent != "PROJ-1" {
+		t.Errorf("parent = %q", f.Issues["PROJ-3"].Parent)
+	}
+
+	for _, tc := range []struct {
+		value, want string
+	}{
+		{"PROJ-2", "outside your privacy scope"},
+		{"PROJ-3", "its own parent"},
+		{"", "not supported"},
+		{"nope", "invalid issue key"},
+	} {
+		_, err := s.PlanUpdate(ctx, "PROJ-3", []FieldInput{{"parent", tc.value}})
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("parent %q: err = %v, want %q", tc.value, err, tc.want)
+		}
+	}
+	if n := len(f.Requests); n == 0 {
+		t.Fatal("no requests recorded")
+	}
+	if f.Issues["PROJ-3"].Parent != "PROJ-1" {
+		t.Error("a refused change modified the parent")
+	}
+}

@@ -494,6 +494,10 @@ func (s *Service) EditableFields(ctx context.Context, key string) ([]EditableFie
 	}
 	var out []EditableField
 	for id, m := range meta {
+		if id == "parent" && contains(m.Operations, "set") {
+			out = append(out, EditableField{ID: "parent", Name: m.Name, Type: "ticket key (must be one of your tickets)"})
+			continue
+		}
 		kind := fieldKind(id, m)
 		if kind == kindUnsupported {
 			continue

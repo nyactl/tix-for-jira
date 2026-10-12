@@ -526,6 +526,7 @@ func editMeta() map[string]any {
 		"description": map[string]any{"name": "Description", "key": "description", "schema": map[string]string{"type": "string", "system": "description"}, "operations": []string{"set"}},
 		"labels":      map[string]any{"name": "Labels", "key": "labels", "schema": map[string]string{"type": "array", "items": "string", "system": "labels"}, "operations": []string{"add", "set", "remove"}},
 		"duedate":     map[string]any{"name": "Due date", "key": "duedate", "schema": map[string]string{"type": "date", "system": "duedate"}, "operations": []string{"set"}},
+		"parent":      map[string]any{"name": "Parent", "key": "parent", "schema": map[string]string{"type": "issuelink", "system": "parent"}, "operations": []string{"set"}},
 		"priority": map[string]any{"name": "Priority", "key": "priority", "schema": map[string]string{"type": "priority", "system": "priority"}, "operations": []string{"set"},
 			"allowedValues": []any{map[string]string{"id": "2", "name": "High"}, map[string]string{"id": "3", "name": "Medium"}, map[string]string{"id": "4", "name": "Low"}}},
 	}
@@ -556,6 +557,13 @@ func (f *Fake) edit(w http.ResponseWriter, i *Issue, body map[string]any) {
 			i.DueDate, _ = v.(string)
 		case "priority":
 			i.Priority, _ = v.(map[string]any)["name"].(string)
+		case "parent":
+			key, _ := v.(map[string]any)["key"].(string)
+			if f.Issues[key] == nil {
+				errJSON(w, 400, "Parent issue not found")
+				return
+			}
+			i.Parent = key
 		default:
 			if !strings.HasPrefix(k, "customfield_") {
 				errJSON(w, 400, "Field '"+k+"' cannot be set.")
