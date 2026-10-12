@@ -523,3 +523,22 @@ func TestCommentsAndWorklogsKeepTheNewest(t *testing.T) {
 		t.Errorf("worklogs = %+v, want the newest two", ws)
 	}
 }
+
+func TestIssueShowsVersionsAndEnvironment(t *testing.T) {
+	t.Parallel()
+	f := fixture(t)
+	i := f.Issues["PROJ-1"]
+	i.FixVersions = []string{"2.1", "2.2"}
+	i.Versions = []string{"2.0"}
+	i.Environment = jiratest.Doc("macOS 15, reported by Alice Smith")
+	d, err := service(t, f, config.PrivacyOwn).Issue(context.Background(), "PROJ-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(d.FixVersions, ",") != "2.1,2.2" || strings.Join(d.Affects, ",") != "2.0" {
+		t.Errorf("versions = %v / %v", d.FixVersions, d.Affects)
+	}
+	if d.Environment != "macOS 15, reported by Person A" {
+		t.Errorf("environment = %q", d.Environment)
+	}
+}

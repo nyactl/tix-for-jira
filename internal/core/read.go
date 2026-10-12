@@ -198,7 +198,14 @@ func (s *Service) Issue(ctx context.Context, key string) (*IssueDetail, error) {
 	for _, c := range f.Components {
 		d.Components = append(d.Components, c.Name)
 	}
+	for _, v := range f.FixVersions {
+		d.FixVersions = append(d.FixVersions, v.Name)
+	}
+	for _, v := range f.Versions {
+		d.Affects = append(d.Affects, v.Name)
+	}
 	d.Description = s.markdown(f.Description)
+	d.Environment = s.markdown(f.Environment)
 	if f.Parent != nil {
 		r := s.related("parent", f.Parent)
 		d.Parent = &r

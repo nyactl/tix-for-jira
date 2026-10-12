@@ -57,3 +57,22 @@ func TestHistory(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+func TestIssueVersionsAndEnvironment(t *testing.T) {
+	t.Parallel()
+	got := Issue(&core.IssueDetail{
+		IssueSummary: core.IssueSummary{Key: "A-1", Summary: "S", Status: "Done", Type: "Task"},
+		Assignee:     "Me",
+		FixVersions:  []string{"2.1"},
+		Affects:      []string{"2.0", "1.9"},
+		Environment:  "macOS 15",
+	})
+	for _, want := range []string{"- Fix versions: 2.1\n", "- Affects versions: 2.0, 1.9\n", "## Environment\n\nmacOS 15"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+	if strings.Contains(Issue(&core.IssueDetail{Assignee: "Me"}), "versions") {
+		t.Error("empty versions rendered")
+	}
+}

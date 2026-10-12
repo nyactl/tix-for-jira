@@ -54,6 +54,8 @@ type Issue struct {
 	Assignee, Reporter                            string
 	Description                                   json.RawMessage
 	Labels                                        []string
+	FixVersions, Versions                         []string
+	Environment                                   json.RawMessage
 	DueDate, Created, Updated                     string
 	Parent                                        string
 	Custom                                        map[string]any
@@ -358,6 +360,18 @@ func (f *Fake) issueJSON(i *Issue, names bool) map[string]any {
 	}
 	if i.DueDate != "" {
 		fields["duedate"] = i.DueDate
+	}
+	versions := func(names []string) []any {
+		out := []any{}
+		for n, name := range names {
+			out = append(out, map[string]any{"id": fmt.Sprint(10100 + n), "name": name, "released": false})
+		}
+		return out
+	}
+	fields["fixVersions"] = versions(i.FixVersions)
+	fields["versions"] = versions(i.Versions)
+	if i.Environment != nil {
+		fields["environment"] = i.Environment
 	}
 	if i.Parent != "" {
 		fields["parent"] = f.related(i.Parent)

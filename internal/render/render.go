@@ -82,6 +82,12 @@ func Issue(d *core.IssueDetail) string {
 	if len(d.Components) > 0 {
 		line(&b, "- Components: %s", strings.Join(d.Components, ", "))
 	}
+	if len(d.FixVersions) > 0 {
+		line(&b, "- Fix versions: %s", strings.Join(d.FixVersions, ", "))
+	}
+	if len(d.Affects) > 0 {
+		line(&b, "- Affects versions: %s", strings.Join(d.Affects, ", "))
+	}
 	line(&b, "- Created: %s, updated: %s", d.Created, d.Updated)
 	if tt := d.TimeTracking; tt != nil {
 		line(&b, "- Time: estimate %s, remaining %s, spent %s", or(tt.Original, "-"), or(tt.Remaining, "-"), or(tt.Spent, "-"))
@@ -97,6 +103,9 @@ func Issue(d *core.IssueDetail) string {
 
 	if d.Description != "" {
 		line(&b, "\n## Description\n\n%s", d.Description)
+	}
+	if d.Environment != "" {
+		line(&b, "\n## Environment\n\n%s", d.Environment)
 	}
 	if d.Parent != nil || len(d.Subtasks) > 0 || len(d.Links) > 0 {
 		line(&b, "\n## Related")
