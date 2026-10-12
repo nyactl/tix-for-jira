@@ -383,6 +383,42 @@ func TestIntegration(t *testing.T) {
 		}
 	})
 
+	t.Run("versions and environment", func(t *testing.T) {
+		fs, err := s.svc.EditableFields(ctx, a)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var changes []core.FieldInput
+		var wantFix, wantEnv string
+		for _, f := range fs {
+			switch {
+			case f.ID == "fixVersions" && len(f.Allowed) > 0:
+				wantFix = f.Allowed[0]
+				changes = append(changes, core.FieldInput{Field: f.ID, Value: wantFix})
+			case f.ID == "environment":
+				wantEnv = "Tested on macOS " + s.run
+				changes = append(changes, core.FieldInput{Field: f.ID, Value: wantEnv})
+			}
+		}
+		if len(changes) == 0 {
+			t.Skip("the test project has no fix versions or environment field to set")
+		}
+		applied(t)(s.svc.PlanUpdate(ctx, a, changes))
+		d, err := s.svc.Issue(ctx, a)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if wantFix != "" && (len(d.FixVersions) != 1 || d.FixVersions[0] != wantFix) {
+			t.Errorf("fix versions = %v, want %s", d.FixVersions, wantFix)
+		}
+		if wantEnv != "" && d.Environment != wantEnv {
+			t.Errorf("environment = %q, want %q", d.Environment, wantEnv)
+		}
+		if wantFix == "" {
+			t.Log("no versions in the test project; only the environment was checked")
+		}
+	})
+
 	t.Run("worklog with start time", func(t *testing.T) {
 		start := time.Now().Add(-2 * time.Hour).Format("2006-01-02 15:04")
 		applied(t)(s.svc.PlanWorklog(ctx, a, "30m", start, ""))

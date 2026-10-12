@@ -60,6 +60,9 @@ type IssueDetail struct {
 	Links        []Related        `json:"links,omitempty"`
 	Attachments  []AttachmentInfo `json:"attachments,omitempty"`
 	TimeTracking *TimeTracking    `json:"timeTracking,omitempty"`
+	FixVersions  []string         `json:"fixVersions,omitempty"`
+	Affects      []string         `json:"affectsVersions,omitempty"`
+	Environment  string           `json:"environment,omitempty"`
 	Fields       []FieldValue     `json:"fields,omitempty"`
 }
 

@@ -106,6 +106,9 @@ type Fields struct {
 	IssueLinks   []IssueLink     `json:"issuelinks"`
 	Attachments  []Attachment    `json:"attachment"`
 	TimeTracking *TimeTracking   `json:"timetracking"`
+	FixVersions  []Named         `json:"fixVersions"`
+	Versions     []Named         `json:"versions"`
+	Environment  json.RawMessage `json:"environment"`
 }
 
 // Issue keeps both the typed system fields and every raw field value, so
