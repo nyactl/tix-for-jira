@@ -177,7 +177,13 @@ func TestSetupCompanyManagedProject(t *testing.T) {
 		}
 	}
 
-	addFieldsToScreens(t, admin, project.ID, "timetracking", "versions")
+	region := ensureCustomField(t, admin, "tix-for-jira Region", "cascadingselect", "cascadingselectsearcher")
+	ensureCascadingOptions(t, admin, region, map[string][]string{"Europe": {"Germany", "France"}, "Americas": {"USA"}})
+	docs := ensureCustomField(t, admin, "tix-for-jira Docs link", "url", "exacttextsearcher")
+	addFieldsToScreens(t, admin, project.ID, "timetracking", "versions", region, docs)
+	var teams json.RawMessage
+	admin.call(t, http.MethodGet, "/rest/api/3/jql/autocompletedata/suggestions?fieldName=Team&fieldValue=", nil, &teams)
+	t.Logf("team suggestions: %s", teams)
 
 	// The tested account needs normal access: browse, create, edit, work on
 	// issues and be assignable. Add it to a member role if it lacks them.
@@ -337,5 +343,87 @@ func addFieldsToScreens(t *testing.T, admin *rawSite, projectID string, fields .
 			st := admin.call(t, http.MethodPost, fmt.Sprintf("/rest/api/3/screens/%d/tabs/%d/fields", screen, tabs[0].ID), map[string]string{"fieldId": f}, &struct{}{})
 			t.Logf("screen %d: add %s -> HTTP %d", screen, f, st)
 		}
+	}
+}
+
+// ensureCustomField returns the ID of a custom field with this name,
+// creating it with the given built-in type and searcher if needed.
+func ensureCustomField(t *testing.T, admin *rawSite, name, typ, searcher string) string {
+	t.Helper()
+	var fields []struct{ ID, Name string }
+	admin.call(t, http.MethodGet, "/rest/api/3/field", nil, &fields)
+	for _, f := range fields {
+		if f.Name == name {
+			return f.ID
+		}
+	}
+	const prefix = "com.atlassian.jira.plugin.system.customfieldtypes:"
+	var created struct{ ID string }
+	if st := admin.call(t, http.MethodPost, "/rest/api/3/field", map[string]string{"name": name, "type": prefix + typ, "searcherKey": prefix + searcher}, &created); st != 201 {
+		t.Fatalf("creating field %s: HTTP %d", name, st)
+	}
+	t.Logf("created field %s (%s)", name, created.ID)
+	return created.ID
+}
+
+func ensureCascadingOptions(t *testing.T, admin *rawSite, fieldID string, tree map[string][]string) {
+	t.Helper()
+	var contexts struct {
+		Values []struct{ ID string } `json:"values"`
+	}
+	admin.call(t, http.MethodGet, "/rest/api/3/field/"+fieldID+"/context", nil, &contexts)
+	if len(contexts.Values) == 0 {
+		t.Fatalf("field %s has no context", fieldID)
+	}
+	base := "/rest/api/3/field/" + fieldID + "/context/" + contexts.Values[0].ID + "/option"
+	type option struct {
+		ID       string `json:"id"`
+		Value    string `json:"value"`
+		OptionID string `json:"optionId"`
+	}
+	list := func() []option {
+		var page struct {
+			Values []option `json:"values"`
+		}
+		admin.call(t, http.MethodGet, base+"?maxResults=100", nil, &page)
+		return page.Values
+	}
+	existing := list()
+	parentID := map[string]string{}
+	for _, o := range existing {
+		if o.OptionID == "" {
+			parentID[o.Value] = o.ID
+		}
+	}
+	var newParents []map[string]string
+	for p := range tree {
+		if parentID[p] == "" {
+			newParents = append(newParents, map[string]string{"value": p})
+		}
+	}
+	if len(newParents) > 0 {
+		admin.call(t, http.MethodPost, base, map[string]any{"options": newParents}, &struct{}{})
+		for _, o := range list() {
+			if o.OptionID == "" {
+				parentID[o.Value] = o.ID
+			}
+		}
+	}
+	have := map[string]bool{}
+	for _, o := range list() {
+		if o.OptionID != "" {
+			have[o.OptionID+"/"+o.Value] = true
+		}
+	}
+	var children []map[string]string
+	for p, kids := range tree {
+		for _, k := range kids {
+			if !have[parentID[p]+"/"+k] {
+				children = append(children, map[string]string{"value": k, "optionId": parentID[p]})
+			}
+		}
+	}
+	if len(children) > 0 {
+		admin.call(t, http.MethodPost, base, map[string]any{"options": children}, &struct{}{})
 	}
 }

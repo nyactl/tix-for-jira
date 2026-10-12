@@ -116,6 +116,17 @@ var customFields = []struct{ id, name, typ, custom string }{
 	{"customfield_10050", "Team", "option", "com.atlassian.jira.plugin.system.customfieldtypes:select"},
 	{"customfield_10060", "Reviewer", "user", "com.atlassian.jira.plugin.system.customfieldtypes:userpicker"},
 	{"customfield_10070", "Notes", "string", "com.atlassian.jira.plugin.system.customfieldtypes:textarea"},
+	{"customfield_10080", "Region", "option-with-child", "com.atlassian.jira.plugin.system.customfieldtypes:cascadingselect"},
+	{"customfield_10081", "Docs link", "string", "com.atlassian.jira.plugin.system.customfieldtypes:url"},
+	{"customfield_10001", "Delivery team", "team", "com.atlassian.jira.plugin.system.customfieldtypes:atlassian-team"},
+}
+
+// Teams known to the fake, by display name.
+var teams = map[string]string{"Platform": "0b9a2f3c-1d4e-4f5a-8b6c-7d8e9f0a1b2c", "Platform Ops": "1c0b3a4d-2e5f-4a6b-9c7d-8e9f0a1b2c3d"}
+
+var regions = []any{
+	map[string]any{"id": "100", "value": "Europe", "children": []any{map[string]string{"id": "101", "value": "Germany"}, map[string]string{"id": "102", "value": "France"}}},
+	map[string]any{"id": "200", "value": "Americas", "children": []any{map[string]string{"id": "201", "value": "USA"}}},
 }
 
 // New starts a fake site with users Me (me@example.com, token "tok-me"),
@@ -265,6 +276,16 @@ func (f *Fake) serve(w http.ResponseWriter, r *http.Request) {
 		f.search(w, r, me)
 	case p == "/rest/api/3/field":
 		f.fieldList(w)
+	case p == "/rest/api/3/jql/autocompletedata/suggestions":
+		var res []any
+		if r.URL.Query().Get("fieldName") == "cf[10001]" {
+			for name, id := range teams {
+				if strings.Contains(strings.ToLower(name), strings.ToLower(r.URL.Query().Get("fieldValue"))) {
+					res = append(res, map[string]string{"value": id, "displayName": name})
+				}
+			}
+		}
+		writeJSON(w, 200, map[string]any{"results": res})
 	case p == "/rest/api/3/issueLinkType":
 		var out []any
 		for _, lt := range linkTypes {
@@ -536,9 +557,13 @@ func editMeta() map[string]any {
 			"allowedValues": []any{map[string]string{"id": "2", "name": "High"}, map[string]string{"id": "3", "name": "Medium"}, map[string]string{"id": "4", "name": "Low"}}},
 	}
 	for _, cf := range customFields {
-		meta := map[string]any{"name": cf.name, "key": cf.id, "schema": map[string]string{"type": cf.typ, "custom": cf.custom}, "operations": []string{"set"}}
-		if cf.typ == "option" {
+		customID, _ := strconv.Atoi(strings.TrimPrefix(cf.id, "customfield_"))
+		meta := map[string]any{"name": cf.name, "key": cf.id, "schema": map[string]any{"type": cf.typ, "custom": cf.custom, "customId": customID}, "operations": []string{"set"}}
+		switch cf.typ {
+		case "option":
 			meta["allowedValues"] = []any{map[string]string{"id": "1", "value": "Alpha"}, map[string]string{"id": "2", "value": "Beta"}}
+		case "option-with-child":
+			meta["allowedValues"] = regions
 		}
 		m[cf.id] = meta
 	}
@@ -582,6 +607,36 @@ func (f *Fake) edit(w http.ResponseWriter, i *Issue, body map[string]any) {
 			}
 			if hasRem {
 				i.RemainingEstimate = rem
+			}
+		case "customfield_10080":
+			// Store what Jira returns when reading a cascading select.
+			sel, _ := v.(map[string]any)
+			out := map[string]any{}
+			for _, r := range regions {
+				p := r.(map[string]any)
+				if p["id"] != sel["id"] {
+					continue
+				}
+				out = map[string]any{"id": p["id"], "value": p["value"]}
+				if c, ok := sel["child"].(map[string]any); ok {
+					for _, ch := range p["children"].([]any) {
+						if chm := ch.(map[string]string); chm["id"] == c["id"] {
+							out["child"] = map[string]any{"id": chm["id"], "value": chm["value"]}
+						}
+					}
+				}
+			}
+			i.Custom[k] = out
+		case "customfield_10001":
+			id, _ := v.(string)
+			for name, tid := range teams {
+				if tid == id {
+					i.Custom[k] = map[string]any{"id": tid, "name": name}
+				}
+			}
+			if i.Custom[k] == nil {
+				errJSON(w, 400, "Team not found")
+				return
 			}
 		default:
 			if !strings.HasPrefix(k, "customfield_") {

@@ -14,6 +14,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -473,6 +474,64 @@ func TestIntegration(t *testing.T) {
 		}
 		if d.TimeTracking == nil || d.TimeTracking.Original != "5h" || d.TimeTracking.Remaining != "2h 15m" {
 			t.Errorf("time tracking = %+v, want original 5h and remaining kept at 2h 15m", d.TimeTracking)
+		}
+	})
+
+	t.Run("cascading select, URL and team fields", func(t *testing.T) {
+		fs, err := s.svc.EditableFields(ctx, b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		byType := map[string]core.EditableField{}
+		for _, f := range fs {
+			switch {
+			case f.Name == "tix-for-jira Region", f.Name == "tix-for-jira Docs link":
+				byType[f.Name] = f
+			case strings.HasPrefix(f.Type, "team"):
+				byType["team"] = f
+			}
+		}
+		region, okR := byType["tix-for-jira Region"]
+		docs, okD := byType["tix-for-jira Docs link"]
+		if !okR || !okD {
+			t.Skip("the custom fields from TestSetupCompanyManagedProject are not on the edit screen")
+		}
+		link := "https://example.com/tix-for-jira/" + strconv.FormatInt(time.Now().Unix(), 10)
+		applied(t)(s.svc.PlanUpdate(ctx, b, []core.FieldInput{{Field: region.ID, Value: "europe / france"}, {Field: docs.ID, Value: link}}))
+		d, err := s.svc.Issue(ctx, b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := map[string]string{}
+		for _, fv := range d.Fields {
+			got[fv.Name] = fv.Value
+		}
+		if got[region.Name] != "Europe / France" || got[docs.Name] != link {
+			t.Errorf("fields = %v", got)
+		}
+		if _, err := s.svc.PlanUpdate(ctx, b, []core.FieldInput{{Field: docs.ID, Value: "javascript:alert(1)"}}); err == nil {
+			t.Error("non-http URL was accepted")
+		}
+
+		team, ok := byType["team"]
+		if !ok {
+			t.Log("no team field on the edit screen; team support not checked")
+			return
+		}
+		if _, err := s.svc.PlanUpdate(ctx, b, []core.FieldInput{{Field: team.ID, Value: "no such team tix-for-jira"}}); err == nil || !strings.Contains(err.Error(), "no team named") {
+			t.Errorf("unknown team: %v", err)
+		}
+		name := os.Getenv("TIX_JIRA_IT_TEAM")
+		if name == "" {
+			t.Log("TIX_JIRA_IT_TEAM not set; setting a team not checked")
+			return
+		}
+		applied(t)(s.svc.PlanUpdate(ctx, b, []core.FieldInput{{Field: team.ID, Value: name}}))
+		d, _ = s.svc.Issue(ctx, b)
+		for _, fv := range d.Fields {
+			if fv.Name == team.Name && !strings.EqualFold(fv.Value, name) {
+				t.Errorf("team = %q, want %q", fv.Value, name)
+			}
 		}
 	})
 

@@ -665,3 +665,65 @@ func TestLooseName(t *testing.T) {
 		t.Error("Task and Subtask must differ")
 	}
 }
+
+func TestPlanUpdateFieldTypes(t *testing.T) {
+	t.Parallel()
+	f := fixture(t)
+	s := service(t, f, config.PrivacyOwn)
+	ctx := context.Background()
+	p, err := s.PlanUpdate(ctx, "PROJ-1", []FieldInput{
+		{"Region", "europe / france"},
+		{"Docs link", "https://example.com/spec"},
+		{"Delivery team", "platform"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.Apply(ctx); err != nil {
+		t.Fatal(err)
+	}
+	d, err := s.Issue(ctx, "PROJ-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, fv := range d.Fields {
+		got[fv.Name] = fv.Value
+	}
+	if got["Region"] != "Europe / France" || got["Docs link"] != "https://example.com/spec" || got["Delivery team"] != "Platform" {
+		t.Errorf("fields = %v", got)
+	}
+
+	if _, err := s.PlanUpdate(ctx, "PROJ-1", []FieldInput{{"Region", "Europe"}}); err != nil {
+		t.Errorf("region parent only: %v", err)
+	}
+	if _, err := s.PlanUpdate(ctx, "PROJ-1", []FieldInput{{"Delivery team", "1C0B3A4D-2E5F-4A6B-9C7D-8E9F0A1B2C3D"}}); err != nil {
+		t.Errorf("team by ID: %v", err)
+	}
+	for _, tc := range []struct {
+		in   FieldInput
+		want string
+	}{
+		{FieldInput{"Region", "Atlantis"}, "choose one of: Europe / Germany"},
+		{FieldInput{"Region", "Europe / USA"}, "Europe / Germany"},
+		{FieldInput{"Docs link", "javascript:alert(1)"}, "http or https"},
+		{FieldInput{"Docs link", "example.com"}, "http or https"},
+		{FieldInput{"Delivery team", "Plat"}, "similar: "},
+		{FieldInput{"Delivery team", "Nobody"}, "no team named"},
+	} {
+		_, err := s.PlanUpdate(ctx, "PROJ-1", []FieldInput{tc.in})
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%v: err = %v, want %q", tc.in, err, tc.want)
+		}
+	}
+
+	fields, err := s.EditableFields(ctx, "PROJ-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ef := range fields {
+		if ef.Name == "Region" && strings.Join(ef.Allowed, ",") != "Europe / Germany,Europe / France,Americas / USA" {
+			t.Errorf("region allowed = %v", ef.Allowed)
+		}
+	}
+}

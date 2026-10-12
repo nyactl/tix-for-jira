@@ -509,7 +509,11 @@ func (s *Service) EditableFields(ctx context.Context, key string) ([]EditableFie
 			continue
 		}
 		ef := EditableField{ID: id, Name: m.Name, Type: kind.String(), Required: m.Required}
-		ef.Allowed = allowedNames(m.AllowedValues, 50)
+		if kind == kindCascade {
+			ef.Allowed = cascadeNames(m.AllowedValues, 50)
+		} else {
+			ef.Allowed = allowedNames(m.AllowedValues, 50)
+		}
 		out = append(out, ef)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })

@@ -163,7 +163,7 @@ func (s *Service) PlanUpdate(ctx context.Context, key string, changes []FieldInp
 		if k == kindUnsupported {
 			return nil, fmt.Errorf("%s cannot be changed with tix-for-jira", m.Name)
 		}
-		v, err := s.convert(k, m, ch.Value)
+		v, err := s.convert(ctx, k, m, ch.Value)
 		if err != nil {
 			return nil, err
 		}
@@ -347,7 +347,7 @@ func (s *Service) PlanCreate(ctx context.Context, in CreateInput) (*Plan, error)
 		if k == kindUnsupported {
 			return fmt.Errorf("%s cannot be set with tix-for-jira", m.Name)
 		}
-		v, err := s.convert(k, m, value)
+		v, err := s.convert(ctx, k, m, value)
 		if err != nil {
 			return err
 		}

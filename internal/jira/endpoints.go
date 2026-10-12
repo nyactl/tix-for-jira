@@ -388,3 +388,22 @@ func (c *Client) AssignIssue(ctx context.Context, key, accountID string) error {
 	}
 	return c.do(ctx, http.MethodPut, p, nil, map[string]string{"accountId": accountID}, nil)
 }
+
+// Suggestion is a JQL autocomplete suggestion for a field value.
+type Suggestion struct {
+	Value       string `json:"value"`
+	DisplayName string `json:"displayName"`
+}
+
+// Suggestions returns JQL autocomplete suggestions for a field, e.g. team
+// names with their IDs.
+func (c *Client) Suggestions(ctx context.Context, fieldName, value string) ([]Suggestion, error) {
+	var out struct {
+		Results []Suggestion `json:"results"`
+	}
+	q := url.Values{"fieldName": {fieldName}, "fieldValue": {value}}
+	if err := c.do(ctx, http.MethodGet, "/rest/api/3/jql/autocompletedata/suggestions", q, nil, &out); err != nil {
+		return nil, err
+	}
+	return out.Results, nil
+}
