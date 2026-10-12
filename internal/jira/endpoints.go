@@ -451,7 +451,7 @@ func (c *Client) AddAttachment(ctx context.Context, key, filename string, data [
 		return nil, err
 	}
 	if len(out) == 0 {
-		return nil, errors.New("Jira accepted the upload but returned no attachment")
+		return nil, errors.New("the upload was accepted but Jira returned no attachment")
 	}
 	return &out[0], nil
 }

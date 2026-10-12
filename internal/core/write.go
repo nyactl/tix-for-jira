@@ -723,7 +723,7 @@ func (s *Service) PlanAttach(ctx context.Context, key, path string) (*Plan, erro
 	if err != nil {
 		return nil, err
 	}
-	f, err := os.Open(abs)
+	f, err := os.Open(abs) //nolint:gosec // G304: uploading the file the user named is the point; it is shown in the plan
 	if err != nil {
 		return nil, err
 	}
