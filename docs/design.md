@@ -14,7 +14,7 @@ cmd: main.go
  └─ internal/mcpserver   MCP tools, elicitation-based confirmation
      └─ internal/core    operations: scope checks, redaction, write plans
          ├─ internal/jira      Jira Cloud REST v3 client
-         ├─ internal/adf       Atlassian Document Format <-> Markdown
+         ├─ go-adf (module)    Atlassian Document Format <-> Markdown
          ├─ internal/privacy   scope rules and person redaction
          └─ internal/render    views -> Markdown / JSON
  internal/config    non-secret settings (site, email, privacy mode)
@@ -67,7 +67,7 @@ API tokens expire after at most a year. The expiry date can be recorded at login
 
 - Cloud REST v3 only; `https` required; Basic auth with email and token.
 - Search uses `/rest/api/3/search/jql` with explicit `fields` and `nextPageToken` paging.
-- Rich text is ADF. `internal/adf` converts ADF to Markdown for reading and a Markdown subset (paragraphs, headings, lists, code, quotes, rules, emphasis, links, mentions) to ADF for writing.
+- Rich text is ADF. The [go-adf](https://github.com/nyactl/go-adf) module converts ADF to Markdown for reading and Markdown to schema-valid ADF for writing, with `@[label]` mentions through hooks. Known names are redacted in each ADF text piece before conversion and again in the Markdown.
 - Attachments are fetched with `redirect=false`, so every request stays on the site host; redirects to another host or scheme are refused.
 - Response bodies are size-limited; errors are mapped to clear messages (expired token, missing permission, feature disabled by the site admin).
 
