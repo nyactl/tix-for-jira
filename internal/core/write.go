@@ -110,6 +110,7 @@ func (s *Service) PlanUpdate(ctx context.Context, key string, changes []FieldInp
 	}
 	fields := map[string]any{}
 	var lines []string
+	estimates := map[string]string{}
 	for _, ch := range changes {
 		if strings.EqualFold(strings.TrimSpace(ch.Field), "parent") {
 			if _, has := meta["parent"]; !has {
@@ -136,6 +137,21 @@ func (s *Service) PlanUpdate(ctx context.Context, key string, changes []FieldInp
 			lines = append(lines, fmt.Sprintf("- Parent:\n    from: %s\n    to:   %s", describe(old), describe(s.people.Text(headline(parent)))))
 			continue
 		}
+		if sub, label, ok := estimateField(ch.Field); ok {
+			if _, has := meta["timetracking"]; !has {
+				return nil, fmt.Errorf("estimates cannot be changed on %s (time tracking is not on its edit screen)", issue.Key)
+			}
+			if _, dup := estimates[sub]; dup {
+				return nil, fmt.Errorf("%s is listed twice", label)
+			}
+			secs, err := parseDuration(ch.Value, maxEstimateHours)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", label, err)
+			}
+			estimates[sub] = formatSeconds(secs)
+			lines = append(lines, fmt.Sprintf("- %s:\n    from: %s\n    to:   %s", label, describe(currentEstimate(issue, sub)), describe(estimates[sub])))
+			continue
+		}
 		id, m, err := findField(meta, ch.Field)
 		if err != nil {
 			return nil, err
@@ -154,6 +170,17 @@ func (s *Service) PlanUpdate(ctx context.Context, key string, changes []FieldInp
 		fields[id] = v
 		old, _ := s.renderValue(issue.Raw[id])
 		lines = append(lines, fmt.Sprintf("- %s:\n    from: %s\n    to:   %s", m.Name, describe(old), describe(strings.TrimSpace(ch.Value))))
+	}
+	if len(estimates) > 0 {
+		// Send both values: setting only one can make Jira recompute the other.
+		for _, sub := range []string{"originalEstimate", "remainingEstimate"} {
+			if _, set := estimates[sub]; !set {
+				if cur := currentEstimate(issue, sub); cur != "" {
+					estimates[sub] = cur
+				}
+			}
+		}
+		fields["timetracking"] = estimates
 	}
 	return &Plan{
 		Kind:        Destructive,
@@ -409,6 +436,11 @@ var durationRe = regexp.MustCompile(`^\s*(?:(\d+(?:\.\d+)?)\s*h)?\s*(?:(\d+)\s*m
 // ParseDuration accepts "1h 30m", "1h30m", "90m" or "1.5h". Days and weeks
 // are rejected because their length depends on site settings.
 func ParseDuration(s string) (int, error) {
+	return parseDuration(s, 24)
+}
+
+// parseDuration parses hours and minutes and accepts up to maxHours.
+func parseDuration(s string, maxHours int) (int, error) {
 	m := durationRe.FindStringSubmatch(strings.ToLower(s))
 	if m == nil || (m[1] == "" && m[2] == "") {
 		return 0, fmt.Errorf("invalid duration %q: use hours and minutes, e.g. 1h 30m or 45m", s)
@@ -423,8 +455,8 @@ func ParseDuration(s string) (int, error) {
 		secs += float64(mins) * 60
 	}
 	total := int(math.Round(secs/60)) * 60
-	if total < 60 || total > 24*3600 {
-		return 0, fmt.Errorf("duration %q must be between 1 minute and 24 hours", s)
+	if total < 60 || total > maxHours*3600 {
+		return 0, fmt.Errorf("duration %q must be between 1 minute and %d hours", s, maxHours)
 	}
 	return total, nil
 }

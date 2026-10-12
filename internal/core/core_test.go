@@ -593,3 +593,63 @@ func TestPlanUpdateParent(t *testing.T) {
 		t.Error("a refused change modified the parent")
 	}
 }
+
+func TestPlanUpdateEstimates(t *testing.T) {
+	t.Parallel()
+	f := fixture(t)
+	i := f.Issues["PROJ-1"]
+	i.OriginalEstimate, i.RemainingEstimate = "4h", "1h"
+	s := service(t, f, config.PrivacyOwn)
+	ctx := context.Background()
+
+	fs, err := s.EditableFields(ctx, "PROJ-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := map[string]bool{}
+	for _, f := range fs {
+		names[f.Name] = true
+	}
+	if !names["Original estimate"] || !names["Remaining estimate"] {
+		t.Errorf("editable fields = %+v", fs)
+	}
+
+	// Changing only the original estimate must keep the remaining estimate.
+	p, err := s.PlanUpdate(ctx, "PROJ-1", []FieldInput{{"Original estimate", "6h 30m"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Kind != Destructive || !strings.Contains(p.Description, `from: "4h"`) || !strings.Contains(p.Description, `to:   "6h 30m"`) {
+		t.Errorf("description:\n%s", p.Description)
+	}
+	if _, err := p.Apply(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if i.OriginalEstimate != "6h 30m" || i.RemainingEstimate != "1h" {
+		t.Errorf("estimates = %q / %q, want 6h 30m / 1h", i.OriginalEstimate, i.RemainingEstimate)
+	}
+
+	p, err = s.PlanUpdate(ctx, "PROJ-1", []FieldInput{{"time remaining", "90m"}, {"originalEstimate", "40h"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.Apply(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if i.OriginalEstimate != "40h" || i.RemainingEstimate != "1h 30m" {
+		t.Errorf("estimates = %q / %q", i.OriginalEstimate, i.RemainingEstimate)
+	}
+	d, _ := s.Issue(ctx, "PROJ-1")
+	if d.TimeTracking == nil || d.TimeTracking.Original != "40h" || d.TimeTracking.Remaining != "1h 30m" {
+		t.Errorf("time tracking view = %+v", d.TimeTracking)
+	}
+
+	for _, bad := range []FieldInput{{"Original estimate", "2d"}, {"Remaining estimate", ""}, {"Original estimate", "lots"}} {
+		if _, err := s.PlanUpdate(ctx, "PROJ-1", []FieldInput{bad}); err == nil {
+			t.Errorf("%v accepted", bad)
+		}
+	}
+	if _, err := s.PlanUpdate(ctx, "PROJ-1", []FieldInput{{"Estimate", "1h"}, {"original estimate", "2h"}}); err == nil {
+		t.Error("estimate listed twice accepted")
+	}
+}

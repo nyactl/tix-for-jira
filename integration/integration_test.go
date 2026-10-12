@@ -440,6 +440,29 @@ func TestIntegration(t *testing.T) {
 		}
 	})
 
+	t.Run("estimates", func(t *testing.T) {
+		fs, err := s.svc.EditableFields(ctx, b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for _, f := range fs {
+			found = found || f.ID == "originalEstimate"
+		}
+		if !found {
+			t.Skip("time tracking is not on the edit screen of the test project")
+		}
+		applied(t)(s.svc.PlanUpdate(ctx, b, []core.FieldInput{{Field: "Original estimate", Value: "3h"}, {Field: "Remaining estimate", Value: "2h 15m"}}))
+		applied(t)(s.svc.PlanUpdate(ctx, b, []core.FieldInput{{Field: "Original estimate", Value: "5h"}}))
+		d, err := s.svc.Issue(ctx, b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if d.TimeTracking == nil || d.TimeTracking.Original != "5h" || d.TimeTracking.Remaining != "2h 15m" {
+			t.Errorf("time tracking = %+v, want original 5h and remaining kept at 2h 15m", d.TimeTracking)
+		}
+	})
+
 	t.Run("worklog with start time", func(t *testing.T) {
 		start := time.Now().Add(-2 * time.Hour).Format("2006-01-02 15:04")
 		applied(t)(s.svc.PlanWorklog(ctx, a, "30m", start, ""))

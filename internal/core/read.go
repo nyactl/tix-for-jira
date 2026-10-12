@@ -498,6 +498,12 @@ func (s *Service) EditableFields(ctx context.Context, key string) ([]EditableFie
 			out = append(out, EditableField{ID: "parent", Name: m.Name, Type: "ticket key (must be one of your tickets)"})
 			continue
 		}
+		if id == "timetracking" {
+			out = append(out,
+				EditableField{ID: "originalEstimate", Name: "Original estimate", Type: "duration (e.g. 2h 30m)"},
+				EditableField{ID: "remainingEstimate", Name: "Remaining estimate", Type: "duration (e.g. 2h 30m)"})
+			continue
+		}
 		kind := fieldKind(id, m)
 		if kind == kindUnsupported {
 			continue
