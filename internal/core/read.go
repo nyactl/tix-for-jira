@@ -224,6 +224,17 @@ func (s *Service) Issue(ctx context.Context, key string) (*IssueDetail, error) {
 			d.Links = append(d.Links, s.related(l.Type.Inward, l.InwardIssue))
 		}
 	}
+	rls, err := s.jc.RemoteLinks(ctx, issue.Key)
+	if err != nil {
+		return nil, err
+	}
+	for _, rl := range rls {
+		// Other schemes (e.g. app links) are left out rather than shown as
+		// something to click.
+		if isWebURL(rl.Object.URL) {
+			d.WebLinks = append(d.WebLinks, WebLink{Title: s.people.Text(rl.Object.Title), URL: rl.Object.URL})
+		}
+	}
 	if tt := f.TimeTracking; tt != nil && (tt.OriginalEstimate != "" || tt.RemainingEstimate != "" || tt.TimeSpent != "") {
 		d.TimeTracking = &TimeTracking{Original: tt.OriginalEstimate, Remaining: tt.RemainingEstimate, Spent: tt.TimeSpent}
 	}

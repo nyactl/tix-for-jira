@@ -229,6 +229,24 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 		},
 	}
 
+	weblink := &cobra.Command{
+		Use:   "weblink <key> <url> [title]",
+		Short: "Add a web link to a ticket",
+		Args:  cobra.RangeArgs(2, 3),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, _, err := a.service(cmd)
+			if err != nil {
+				return err
+			}
+			title := ""
+			if len(args) == 3 {
+				title = args[2]
+			}
+			p, err := svc.PlanWebLink(cmd.Context(), args[0], args[1], title)
+			return a.apply(cmd, svc, p, err)
+		},
+	}
+
 	watchCmd := func(use, short string, watch bool) *cobra.Command {
 		return &cobra.Command{
 			Use:   use + " <key>",
@@ -245,7 +263,7 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 		}
 	}
 
-	root.AddCommand(comment, update, transition, create, logWork, link, take, attach,
+	root.AddCommand(comment, update, transition, create, logWork, link, weblink, take, attach,
 		watchCmd("watch", "Watch a ticket to get its notifications", true),
 		watchCmd("unwatch", "Stop watching a ticket", false))
 }

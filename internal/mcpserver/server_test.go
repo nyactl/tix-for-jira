@@ -95,7 +95,7 @@ func toolMap(t *testing.T, h *harness) map[string]*mcp.Tool {
 	return m
 }
 
-var writeTools = []string{"add_comment", "assign_to_me", "attach_file", "create_issue", "link_issues", "log_work", "move_to_sprint", "transition_issue", "unwatch_issue", "update_fields", "watch_issue"}
+var writeTools = []string{"add_comment", "add_web_link", "assign_to_me", "attach_file", "create_issue", "link_issues", "log_work", "move_to_sprint", "transition_issue", "unwatch_issue", "update_fields", "watch_issue"}
 
 func TestReadOnlyByDefault(t *testing.T) {
 	t.Parallel()
