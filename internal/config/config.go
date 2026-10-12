@@ -34,7 +34,13 @@ type Config struct {
 	// this profile. It is never allowed for the default profile, which is
 	// meant for production.
 	AllowDevBuilds bool `json:"allowDevBuilds,omitempty"`
+	// ScopedToken marks a scoped API token, which only works through
+	// Atlassian's API gateway for the site with CloudID.
+	ScopedToken bool   `json:"scopedToken,omitempty"`
+	CloudID     string `json:"cloudId,omitempty"`
 }
+
+var cloudIDRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 // ErrNotConfigured is returned by Load when no login has happened yet.
 var ErrNotConfigured = errors.New("this profile is not set up yet; run `tix auth login` (add --profile <name> for other profiles)")
@@ -176,6 +182,9 @@ func (c *Config) Validate() error {
 		if _, err := time.Parse(time.DateOnly, c.TokenExpiry); err != nil {
 			return fmt.Errorf("invalid token expiry %q (want YYYY-MM-DD)", c.TokenExpiry)
 		}
+	}
+	if c.ScopedToken && !cloudIDRe.MatchString(c.CloudID) {
+		return fmt.Errorf("invalid cloud ID %q for a scoped token; run `tix auth login` again", c.CloudID)
 	}
 	return nil
 }

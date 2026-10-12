@@ -29,7 +29,15 @@ const (
 var (
 	ErrUnauthorized = errors.New("credentials rejected by Jira: the API token may be expired or revoked; create a new one at https://id.atlassian.com/manage-profile/security/api-tokens and run `tix auth login`")
 	ErrNotFound     = errors.New("not found, or you do not have permission to see it")
+	// ErrMissingScope means a scoped API token lacks a scope the request needs.
+	ErrMissingScope = errors.New("the API token lacks a scope this request needs; create a token with the scopes listed in the README (Scoped API tokens) and run `tix auth login`")
 )
+
+// Gateway is Atlassian's API gateway, the only host that accepts scoped API
+// tokens.
+const Gateway = "https://api.atlassian.com"
+
+var cloudIDRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 // APIError is a non-2xx response that is not mapped to a sentinel error.
 type APIError struct {
@@ -51,6 +59,7 @@ func (e *APIError) Error() string {
 // Client talks to one Jira Cloud site as one user.
 type Client struct {
 	site      string
+	base      string // where API requests go: the site, or the gateway
 	auth      string
 	userAgent string
 	http      *http.Client
@@ -59,6 +68,14 @@ type Client struct {
 
 // Option customises a Client.
 type Option func(*Client)
+
+// WithGateway sends API requests through gateway (normally Gateway) for the
+// site with cloudID, as scoped API tokens require.
+func WithGateway(gateway, cloudID string) Option {
+	return func(c *Client) {
+		c.base = strings.TrimRight(gateway, "/") + "/ex/jira/" + cloudID
+	}
+}
 
 // WithTransport sets the HTTP transport, e.g. to trust a test server.
 func WithTransport(rt http.RoundTripper) Option {
@@ -77,10 +94,40 @@ func New(site, email, token, version string, opts ...Option) *Client {
 		},
 		sleep: sleepCtx,
 	}
+	c.base = c.site
 	for _, o := range opts {
 		o(c)
 	}
 	return c
+}
+
+// CloudID looks up the site's cloud ID, which Atlassian publishes without
+// authentication.
+func (c *Client) CloudID(ctx context.Context) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.site+"/_edge/tenant_info", nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", c.userAgent)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("looking up the cloud ID of %s: HTTP %d", c.site, resp.StatusCode)
+	}
+	var info struct {
+		CloudID string `json:"cloudId"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<16)).Decode(&info); err != nil {
+		return "", fmt.Errorf("looking up the cloud ID of %s: %w", c.site, err)
+	}
+	if !cloudIDRe.MatchString(info.CloudID) {
+		return "", fmt.Errorf("%s returned an invalid cloud ID", c.site)
+	}
+	return info.CloudID, nil
 }
 
 // Site returns the base URL, e.g. https://team.atlassian.net.
@@ -110,7 +157,7 @@ func sleepCtx(ctx context.Context, d time.Duration) error {
 }
 
 func (c *Client) newRequest(ctx context.Context, method, path string, query url.Values, body any) (*http.Request, error) {
-	u := c.site + path
+	u := c.base + path
 	if len(query) > 0 {
 		u += "?" + query.Encode()
 	}
@@ -175,7 +222,11 @@ func (c *Client) send(ctx context.Context, method, path string, query url.Values
 			continue
 		}
 		defer func() { _ = resp.Body.Close() }()
-		return nil, decodeError(resp)
+		err = decodeError(resp)
+		if errors.Is(err, ErrMissingScope) && strings.HasPrefix(path, "/rest/agile/") {
+			err = fmt.Errorf("%w (boards and sprints need the Jira Software scopes)", err)
+		}
+		return nil, err
 	}
 }
 
@@ -189,6 +240,11 @@ func retryAfter(h string, attempt int) time.Duration {
 func decodeError(resp *http.Response) error {
 	switch resp.StatusCode {
 	case http.StatusUnauthorized:
+		// The gateway answers a missing scope with 401 and this message.
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+		if bytes.Contains(b, []byte("scope does not match")) {
+			return ErrMissingScope
+		}
 		return ErrUnauthorized
 	case http.StatusNotFound:
 		return ErrNotFound

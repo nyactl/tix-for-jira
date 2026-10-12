@@ -76,7 +76,7 @@ func setup(t *testing.T) *site {
 	if err != nil {
 		t.Fatal(err)
 	}
-	jc := jira.New(cfg.Site, cfg.Email, token, "integration")
+	jc := newClient(cfg, token)
 	svc, err := core.New(context.Background(), jc, cfg.Privacy)
 	if err != nil {
 		t.Fatal(err)
@@ -112,6 +112,16 @@ func testSiteConfig(t *testing.T, profile string) *config.Config {
 
 // applied returns a function that applies a plan, failing the test on any
 // error; use it as applied(t)(svc.PlanX(...)).
+// newClient talks to the test site as the profile's account, through the
+// API gateway when the profile uses a scoped token.
+func newClient(cfg *config.Config, token string) *jira.Client {
+	var opts []jira.Option
+	if cfg.ScopedToken {
+		opts = append(opts, jira.WithGateway(jira.Gateway, cfg.CloudID))
+	}
+	return jira.New(cfg.Site, cfg.Email, token, "integration", opts...)
+}
+
 func applied(t *testing.T) func(*core.Plan, error) string {
 	return func(p *core.Plan, err error) string {
 		t.Helper()
