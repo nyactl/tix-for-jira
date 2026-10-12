@@ -259,6 +259,7 @@ func TestSetupCompanyManagedProject(t *testing.T) {
 	}}, &mine); st != 201 {
 		t.Fatalf("the test account cannot create tickets in %s: HTTP %d", key, st)
 	}
+	closeWhenDone(t, jira.New(tested.cfg.Site, tested.cfg.Email, tested.token, "integration"), mine.Key)
 	var meta struct {
 		Fields map[string]json.RawMessage `json:"fields"`
 	}
