@@ -200,4 +200,30 @@ func TestTwoPeople(t *testing.T) {
 			t.Errorf("the mention does not point to the other person: %s", body)
 		}
 	})
+
+	t.Run("take an unassigned ticket", func(t *testing.T) {
+		free := other.createOwned(t, s.project, "tix-for-jira people: unassigned "+s.run)
+		if err := other.jc.EditIssue(ctx, free, map[string]any{"assignee": nil}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.svc.PlanTake(ctx, theirs); err == nil || !strings.Contains(err.Error(), "someone else") {
+			t.Errorf("taking the other person's ticket: %v", err)
+		}
+		p, err := s.svc.PlanTake(ctx, free)
+		if err != nil {
+			t.Fatal(err)
+		}
+		other.assertAbsent(t, "take plan", p.Description)
+		if strings.Contains(p.Description, "unassigned "+s.run) {
+			t.Errorf("plan reveals the summary of an out-of-scope ticket: %q", p.Description)
+		}
+		applied(t)(p, nil)
+		d, err := s.svc.Issue(ctx, free)
+		if err != nil || d.Assignee != "Me" {
+			t.Errorf("after take: %+v, %v", d, err)
+		}
+		if _, err := s.svc.PlanTake(ctx, free); err == nil || !strings.Contains(err.Error(), "already assigned to you") {
+			t.Errorf("taking it again: %v", err)
+		}
+	})
 }

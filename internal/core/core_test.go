@@ -727,3 +727,48 @@ func TestPlanUpdateFieldTypes(t *testing.T) {
 		}
 	}
 }
+
+func TestPlanTake(t *testing.T) {
+	t.Parallel()
+	f := fixture(t)
+	f.AddIssue(jiratest.Issue{Key: "PROJ-9", Summary: "Unassigned work for Alice Smith", Reporter: "acc-alice"})
+	s := service(t, f, config.PrivacyOwn)
+	ctx := context.Background()
+	if _, err := s.Issue(ctx, "PROJ-9"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unassigned ticket visible before take: %v", err)
+	}
+	p, err := s.PlanTake(ctx, "proj-9")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Kind != Destructive || p.Key != "PROJ-9" || !strings.Contains(p.Description, "Assign PROJ-9 (") || strings.Contains(p.Description, "Unassigned work") {
+		t.Errorf("description = %q", p.Description)
+	}
+	assertNoPersonalData(t, p.Description)
+	if _, err := p.Apply(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if f.Issues["PROJ-9"].Assignee != "acc-me" {
+		t.Errorf("assignee = %q", f.Issues["PROJ-9"].Assignee)
+	}
+	if _, err := s.Issue(ctx, "PROJ-9"); err != nil {
+		t.Errorf("taken ticket not in scope: %v", err)
+	}
+
+	for key, want := range map[string]string{
+		"PROJ-9":   "already assigned to you",
+		"PROJ-2":   "assigned to someone else",
+		"PROJ-404": ErrNotFound.Error(),
+	} {
+		if _, err := s.PlanTake(ctx, key); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s: err = %v, want %q", key, err, want)
+		}
+	}
+
+	off := service(t, f, config.PrivacyOff)
+	f.AddIssue(jiratest.Issue{Key: "PROJ-10", Summary: "Shared chore"})
+	p, err = off.PlanTake(ctx, "PROJ-10")
+	if err != nil || !strings.Contains(p.Description, "Shared chore") {
+		t.Errorf("off mode: %v, %v", p, err)
+	}
+}

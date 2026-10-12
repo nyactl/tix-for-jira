@@ -201,5 +201,19 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 		},
 	}
 
-	root.AddCommand(comment, update, transition, create, logWork, link)
+	take := &cobra.Command{
+		Use:   "take <key>",
+		Short: "Assign an unassigned ticket to yourself",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, _, err := a.service(cmd)
+			if err != nil {
+				return err
+			}
+			p, err := svc.PlanTake(cmd.Context(), args[0])
+			return a.apply(cmd, svc, p, err)
+		},
+	}
+
+	root.AddCommand(comment, update, transition, create, logWork, link, take)
 }
