@@ -55,6 +55,7 @@ type Issue struct {
 	Description                                   json.RawMessage
 	Labels                                        []string
 	FixVersions, Versions                         []string
+	OriginalEstimate, RemainingEstimate           string
 	Environment                                   json.RawMessage
 	DueDate, Created, Updated                     string
 	Parent                                        string
@@ -368,6 +369,9 @@ func (f *Fake) issueJSON(i *Issue, names bool) map[string]any {
 		}
 		return out
 	}
+	if i.OriginalEstimate != "" || i.RemainingEstimate != "" {
+		fields["timetracking"] = map[string]string{"originalEstimate": i.OriginalEstimate, "remainingEstimate": i.RemainingEstimate}
+	}
 	fields["fixVersions"] = versions(i.FixVersions)
 	fields["versions"] = versions(i.Versions)
 	if i.Environment != nil {
@@ -522,11 +526,12 @@ func paged(r *http.Request, key string, items []any) map[string]any {
 
 func editMeta() map[string]any {
 	m := map[string]any{
-		"summary":     map[string]any{"name": "Summary", "key": "summary", "schema": map[string]string{"type": "string", "system": "summary"}, "operations": []string{"set"}},
-		"description": map[string]any{"name": "Description", "key": "description", "schema": map[string]string{"type": "string", "system": "description"}, "operations": []string{"set"}},
-		"labels":      map[string]any{"name": "Labels", "key": "labels", "schema": map[string]string{"type": "array", "items": "string", "system": "labels"}, "operations": []string{"add", "set", "remove"}},
-		"duedate":     map[string]any{"name": "Due date", "key": "duedate", "schema": map[string]string{"type": "date", "system": "duedate"}, "operations": []string{"set"}},
-		"parent":      map[string]any{"name": "Parent", "key": "parent", "schema": map[string]string{"type": "issuelink", "system": "parent"}, "operations": []string{"set"}},
+		"summary":      map[string]any{"name": "Summary", "key": "summary", "schema": map[string]string{"type": "string", "system": "summary"}, "operations": []string{"set"}},
+		"description":  map[string]any{"name": "Description", "key": "description", "schema": map[string]string{"type": "string", "system": "description"}, "operations": []string{"set"}},
+		"labels":       map[string]any{"name": "Labels", "key": "labels", "schema": map[string]string{"type": "array", "items": "string", "system": "labels"}, "operations": []string{"add", "set", "remove"}},
+		"duedate":      map[string]any{"name": "Due date", "key": "duedate", "schema": map[string]string{"type": "date", "system": "duedate"}, "operations": []string{"set"}},
+		"timetracking": map[string]any{"name": "Time tracking", "key": "timetracking", "schema": map[string]string{"type": "timetracking", "system": "timetracking"}, "operations": []string{"set", "edit"}},
+		"parent":       map[string]any{"name": "Parent", "key": "parent", "schema": map[string]string{"type": "issuelink", "system": "parent"}, "operations": []string{"set"}},
 		"priority": map[string]any{"name": "Priority", "key": "priority", "schema": map[string]string{"type": "priority", "system": "priority"}, "operations": []string{"set"},
 			"allowedValues": []any{map[string]string{"id": "2", "name": "High"}, map[string]string{"id": "3", "name": "Medium"}, map[string]string{"id": "4", "name": "Low"}}},
 	}
@@ -564,6 +569,20 @@ func (f *Fake) edit(w http.ResponseWriter, i *Issue, body map[string]any) {
 				return
 			}
 			i.Parent = key
+		case "timetracking":
+			tt, _ := v.(map[string]any)
+			// Like Jira, a missing remaining estimate follows the original.
+			orig, _ := tt["originalEstimate"].(string)
+			rem, hasRem := tt["remainingEstimate"].(string)
+			if orig != "" {
+				i.OriginalEstimate = orig
+				if !hasRem {
+					i.RemainingEstimate = orig
+				}
+			}
+			if hasRem {
+				i.RemainingEstimate = rem
+			}
 		default:
 			if !strings.HasPrefix(k, "customfield_") {
 				errJSON(w, 400, "Field '"+k+"' cannot be set.")

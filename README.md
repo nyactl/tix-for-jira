@@ -53,7 +53,7 @@ tix history PROJ-123 --since -7d
 tix search 'project = PROJ AND priority = High'
 
 tix comment PROJ-123 --body "Fixed in **v2.1**, thanks @[Person A]"
-tix update PROJ-123 --set "Labels=auth,urgent" --set "Story Points=3"
+tix update PROJ-123 --set "Labels=auth,urgent" --set "Story Points=3" --set "Original estimate=2h 30m"
 tix transition PROJ-123 "In Progress"
 tix log PROJ-123 1h30m --started 09:00 --comment "Code review"
 tix create --project PROJ --type Task --summary "Follow-up" --description -   # description from stdin

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/nyactl/tix-for-jira/internal/jira"
 )
@@ -216,4 +217,42 @@ func findField(meta map[string]jira.FieldMeta, name string) (string, jira.FieldM
 		return ids[0], meta[ids[0]], nil
 	}
 	return "", jira.FieldMeta{}, fmt.Errorf("field name %q is ambiguous; use one of the IDs %s", name, strings.Join(ids, ", "))
+}
+
+// maxEstimateHours bounds estimates; days and weeks are not accepted because
+// their length depends on site settings.
+const maxEstimateHours = 10000
+
+// estimateField recognises the two parts of Jira's time tracking field.
+func estimateField(name string) (sub, label string, ok bool) {
+	switch strings.ToLower(strings.Join(strings.Fields(name), " ")) {
+	case "original estimate", "originalestimate", "estimate":
+		return "originalEstimate", "Original estimate", true
+	case "remaining estimate", "remainingestimate", "time remaining", "remaining":
+		return "remainingEstimate", "Remaining estimate", true
+	}
+	return "", "", false
+}
+
+func currentEstimate(issue *jira.Issue, sub string) string {
+	tt := issue.Fields.TimeTracking
+	if tt == nil {
+		return ""
+	}
+	if sub == "originalEstimate" {
+		return tt.OriginalEstimate
+	}
+	return tt.RemainingEstimate
+}
+
+// looseName compares names the way people type them: "subtask", "Sub-task"
+// and "Sub task" are the same issue type.
+func looseName(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(s) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
