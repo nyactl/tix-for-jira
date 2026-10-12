@@ -17,6 +17,7 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 - Boards and sprints: `tix boards`, `tix sprint list|show <board>`, `tix backlog <board>` and the MCP tools `list_boards`, `list_sprints`, `get_active_sprint`, `get_backlog`. In privacy mode `own` they show only your tickets plus the total number of tickets.
 - `tix sprint move KEY SPRINT|backlog` and MCP `move_to_sprint` move one of your tickets into an active or future sprint (by ID or name) or back to the backlog.
 - `tix attach KEY FILE` and MCP `attach_file` upload a local file of up to 50 MiB. The plan shows the file name, size and full path, and exactly the approved content is uploaded. The MCP tool only accepts absolute paths and refuses hidden files and folders.
+- Scoped API tokens: `tix auth login` recognises them and routes all requests through the Atlassian API gateway. A missing scope is named in the error. The README lists the scopes per use case.
 
 ## [0.1.1] - 2026-10-09
 

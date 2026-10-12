@@ -454,7 +454,7 @@ func TestLoginWithScopedToken(t *testing.T) {
 
 	// Boards need Jira Software scopes this token does not have.
 	_, _, err = e.run(t, "boards")
-	if !errors.Is(err, jira.ErrMissingScope) {
+	if !errors.Is(err, jira.ErrMissingScope) || !strings.Contains(err.Error(), "read:board-scope:jira-software and read:project:jira") {
 		t.Errorf("boards: %v", err)
 	}
 	out, _, _ = e.run(t, "config", "show")

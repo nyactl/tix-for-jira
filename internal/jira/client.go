@@ -223,8 +223,10 @@ func (c *Client) send(ctx context.Context, method, path string, query url.Values
 		}
 		defer func() { _ = resp.Body.Close() }()
 		err = decodeError(resp)
-		if errors.Is(err, ErrMissingScope) && strings.HasPrefix(path, "/rest/agile/") {
-			err = fmt.Errorf("%w (boards and sprints need the Jira Software scopes)", err)
+		if errors.Is(err, ErrMissingScope) {
+			if scopes := agileScopes(method, path); scopes != "" {
+				err = fmt.Errorf("%w (this request needs %s)", err, scopes)
+			}
 		}
 		return nil, err
 	}
