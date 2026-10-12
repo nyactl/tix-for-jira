@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"math"
+	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -697,4 +700,65 @@ func (s *Service) PlanWatch(ctx context.Context, key string, watch bool) (*Plan,
 			return fmt.Sprintf(done, issue.Key), nil
 		},
 	}, nil
+}
+
+// PlanAttach prepares uploading a local file. The file is read now, so the
+// upload is exactly what the human approved.
+func (s *Service) PlanAttach(ctx context.Context, key, path string) (*Plan, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return nil, err
+	}
+	st, err := os.Stat(abs)
+	if err != nil {
+		return nil, err
+	}
+	if !st.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s is not a regular file", abs)
+	}
+	if st.Size() > maxAttachmentBytes {
+		return nil, fmt.Errorf("%s is %s; the limit is %s", abs, formatBytes(st.Size()), formatBytes(maxAttachmentBytes))
+	}
+	issue, err := s.scoped(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	f, err := os.Open(abs)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	data, err := io.ReadAll(io.LimitReader(f, maxAttachmentBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > maxAttachmentBytes {
+		return nil, fmt.Errorf("%s grew beyond the limit of %s", abs, formatBytes(maxAttachmentBytes))
+	}
+	name := strings.Trim(unsafeFileChars.ReplaceAllString(filepath.Base(abs), "_"), ". ")
+	if name == "" {
+		name = "attachment"
+	}
+	return &Plan{
+		Kind:        Additive,
+		Key:         issue.Key,
+		Description: fmt.Sprintf("Attach %s (%s, from %s) to %s.", name, formatBytes(int64(len(data))), abs, s.people.Text(headline(issue))),
+		apply: func(ctx context.Context) (string, error) {
+			a, err := s.jc.AddAttachment(ctx, issue.Key, name, data)
+			if err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("Attached %s to %s as attachment %s.", name, issue.Key, a.ID), nil
+		},
+	}, nil
+}
+
+func formatBytes(n int64) string {
+	switch {
+	case n >= 1<<20:
+		return fmt.Sprintf("%.1f MiB", float64(n)/(1<<20))
+	case n >= 1<<10:
+		return fmt.Sprintf("%.1f KiB", float64(n)/(1<<10))
+	}
+	return fmt.Sprintf("%d bytes", n)
 }

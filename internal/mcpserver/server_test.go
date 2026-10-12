@@ -2,6 +2,8 @@ package mcpserver
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -93,7 +95,7 @@ func toolMap(t *testing.T, h *harness) map[string]*mcp.Tool {
 	return m
 }
 
-var writeTools = []string{"add_comment", "assign_to_me", "create_issue", "link_issues", "log_work", "move_to_sprint", "transition_issue", "unwatch_issue", "update_fields", "watch_issue"}
+var writeTools = []string{"add_comment", "assign_to_me", "attach_file", "create_issue", "link_issues", "log_work", "move_to_sprint", "transition_issue", "unwatch_issue", "update_fields", "watch_issue"}
 
 func TestReadOnlyByDefault(t *testing.T) {
 	t.Parallel()
@@ -235,5 +237,34 @@ func TestGateStateIsSingleUseAndBound(t *testing.T) {
 	now = now.Add(approvalTTL + time.Second)
 	if g.redeem(s, "a") {
 		t.Error("expired state redeemed")
+	}
+}
+
+func TestCheckUploadPath(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	plain := filepath.Join(dir, "report.txt")
+	hiddenDir := filepath.Join(dir, ".ssh")
+	key := filepath.Join(hiddenDir, "id_ed25519")
+	link := filepath.Join(dir, "innocent.txt")
+	dotfile := filepath.Join(dir, ".netrc")
+	for _, err := range []error{
+		os.WriteFile(plain, []byte("x"), 0o600),
+		os.Mkdir(hiddenDir, 0o700),
+		os.WriteFile(key, []byte("x"), 0o600),
+		os.Symlink(key, link),
+		os.WriteFile(dotfile, []byte("x"), 0o600),
+	} {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := checkUploadPath(plain); err != nil {
+		t.Errorf("plain file: %v", err)
+	}
+	for _, p := range []string{key, link, dotfile, "report.txt", dir + "/sub/../report.txt"} {
+		if err := checkUploadPath(p); err == nil {
+			t.Errorf("%s was accepted", p)
+		}
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -299,6 +300,32 @@ func TestIntegration(t *testing.T) {
 		f, err := s.svc.Attachment(ctx, b, d.Attachments[0].ID, t.TempDir())
 		if err != nil || !bytes.Equal(f.Data, data) {
 			t.Errorf("attachment = %+v, %v", f, err)
+		}
+	})
+
+	t.Run("attachment upload", func(t *testing.T) {
+		data := []byte("uploaded by tix " + s.run)
+		path := filepath.Join(t.TempDir(), "tix upload.txt")
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		applied(t)(s.svc.PlanAttach(ctx, b, path))
+		d, err := s.svc.Issue(ctx, b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var id string
+		for _, at := range d.Attachments {
+			if at.Filename == "tix upload.txt" {
+				id = at.ID
+			}
+		}
+		if id == "" {
+			t.Fatalf("uploaded file not among %+v", d.Attachments)
+		}
+		f, err := s.svc.Attachment(ctx, b, id, t.TempDir())
+		if err != nil || !bytes.Equal(f.Data, data) || f.Author != "Me" {
+			t.Errorf("downloaded upload = %+v, %v", f, err)
 		}
 	})
 
