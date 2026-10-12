@@ -1,8 +1,11 @@
 package core
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -26,10 +29,13 @@ const (
 	kindPriority
 	kindComponents
 	kindVersions
+	kindURL
+	kindCascade
+	kindTeam
 )
 
 func (k kind) String() string {
-	return [...]string{"unsupported", "text", "markdown", "number", "date (YYYY-MM-DD)", "date-time", "labels (comma-separated)", "choice", "choices (comma-separated)", "priority", "components (comma-separated)", "versions (comma-separated)"}[k]
+	return [...]string{"unsupported", "text", "markdown", "number", "date (YYYY-MM-DD)", "date-time", "labels (comma-separated)", "choice", "choices (comma-separated)", "priority", "components (comma-separated)", "versions (comma-separated)", "URL (http or https)", "choice (Parent / Child)", "team (name or ID)"}[k]
 }
 
 // fieldKind decides how a field is written. People fields are deliberately
@@ -42,8 +48,14 @@ func fieldKind(id string, m jira.FieldMeta) kind {
 	switch {
 	case sch.System == "description" || sch.System == "environment" || strings.HasSuffix(sch.Custom, ":textarea"):
 		return kindRich
+	case strings.HasSuffix(sch.Custom, ":url"):
+		return kindURL
 	case sch.Type == "string":
 		return kindText
+	case sch.Type == "option-with-child":
+		return kindCascade
+	case sch.Type == "team":
+		return kindTeam
 	case sch.Type == "number":
 		return kindNumber
 	case sch.Type == "date":
@@ -137,7 +149,7 @@ func splitList(s string) []string {
 
 // convert turns user input into the JSON value Jira expects for the field.
 // An empty input clears the field.
-func (s *Service) convert(k kind, m jira.FieldMeta, input string) (any, error) {
+func (s *Service) convert(ctx context.Context, k kind, m jira.FieldMeta, input string) (any, error) {
 	input = strings.TrimSpace(input)
 	if input == "" {
 		if m.Required {
@@ -151,6 +163,16 @@ func (s *Service) convert(k kind, m jira.FieldMeta, input string) (any, error) {
 	switch k {
 	case kindText:
 		return input, nil
+	case kindURL:
+		u, err := url.Parse(input)
+		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+			return nil, fmt.Errorf("%s needs an http or https URL, got %q", m.Name, input)
+		}
+		return input, nil
+	case kindCascade:
+		return cascadeValue(m, input)
+	case kindTeam:
+		return s.teamValue(ctx, m, input)
 	case kindRich:
 		return s.toADF(input)
 	case kindNumber:
@@ -255,4 +277,81 @@ func looseName(s string) string {
 		}
 	}
 	return b.String()
+}
+
+type cascadeOption struct {
+	ID       string          `json:"id"`
+	Value    string          `json:"value"`
+	Children []cascadeOption `json:"children"`
+}
+
+// cascadeValue resolves "Parent / Child" (or just "Parent") against the
+// field's allowed values.
+func cascadeValue(m jira.FieldMeta, input string) (any, error) {
+	parentName, childName, _ := strings.Cut(input, "/")
+	parentName, childName = strings.TrimSpace(parentName), strings.TrimSpace(childName)
+	var choices []string
+	for _, raw := range m.AllowedValues {
+		var p cascadeOption
+		if json.Unmarshal(raw, &p) != nil {
+			continue
+		}
+		for _, c := range p.Children {
+			choices = append(choices, p.Value+" / "+c.Value)
+		}
+		if !strings.EqualFold(p.Value, parentName) {
+			continue
+		}
+		if childName == "" {
+			return map[string]any{"id": p.ID}, nil
+		}
+		for _, c := range p.Children {
+			if strings.EqualFold(c.Value, childName) {
+				return map[string]any{"id": p.ID, "child": map[string]string{"id": c.ID}}, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("%s: %q is not allowed; choose one of: %s", m.Name, input, strings.Join(choices, ", "))
+}
+
+func cascadeNames(raw []json.RawMessage, limit int) []string {
+	var out []string
+	for _, r := range raw {
+		var p cascadeOption
+		if json.Unmarshal(r, &p) != nil {
+			continue
+		}
+		for _, c := range p.Children {
+			if len(out) == limit {
+				return append(out, "…")
+			}
+			out = append(out, p.Value+" / "+c.Value)
+		}
+	}
+	return out
+}
+
+var teamIDRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+// teamValue accepts a team ID or a team name, which is resolved through
+// Jira's search suggestions for the field.
+func (s *Service) teamValue(ctx context.Context, m jira.FieldMeta, input string) (any, error) {
+	if teamIDRe.MatchString(strings.ToLower(input)) {
+		return strings.ToLower(input), nil
+	}
+	sugg, err := s.jc.Suggestions(ctx, fmt.Sprintf("cf[%d]", m.Schema.CustomID), input)
+	if err != nil {
+		return nil, fmt.Errorf("%s: looking up team %q: %w", m.Name, input, err)
+	}
+	var names []string
+	for _, sg := range sugg {
+		if strings.EqualFold(sg.DisplayName, input) {
+			return sg.Value, nil
+		}
+		names = append(names, sg.DisplayName)
+	}
+	if len(names) == 0 {
+		return nil, fmt.Errorf("%s: no team named %q", m.Name, input)
+	}
+	return nil, fmt.Errorf("%s: no team named exactly %q; similar: %s", m.Name, input, strings.Join(names, ", "))
 }
