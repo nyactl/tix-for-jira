@@ -562,6 +562,56 @@ func TestIntegration(t *testing.T) {
 		}
 	})
 
+	t.Run("boards, active sprint and backlog", func(t *testing.T) {
+		bs, err := s.svc.Boards(ctx, s.project)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(bs) == 0 {
+			t.Fatalf("no board for %s", s.project)
+		}
+		var board *core.BoardView
+		for i := range bs {
+			if bs[i].Type == "scrum" {
+				board = &bs[i]
+			}
+		}
+		if board == nil {
+			if _, err := s.svc.Sprints(ctx, strconv.Itoa(bs[0].ID)); err == nil || !strings.Contains(err.Error(), "has no sprints") {
+				t.Errorf("sprints of a %s board: %v", bs[0].Type, err)
+			}
+			t.Skip("no scrum board in the test project")
+		}
+		ref := strconv.Itoa(board.ID)
+		ss, err := s.svc.Sprints(ctx, ref)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(ss) == 0 || ss[0].State != "active" {
+			t.Skip("no active sprint; run TestSetupCompanyManagedProject")
+		}
+		gs, err := s.svc.ActiveSprints(ctx, board.Name, 200)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, g := range gs {
+			if g.Total < len(g.Issues) {
+				t.Errorf("sprint %s: total %d < shown %d", g.Sprint.Name, g.Total, len(g.Issues))
+			}
+		}
+		bl, err := s.svc.Backlog(ctx, ref, 200)
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for _, i := range bl.Issues {
+			found = found || i.Key == a
+		}
+		if !found || bl.Total < len(bl.Issues) {
+			t.Errorf("new ticket %s not in the backlog of %s (%d shown, %d total)", a, board.Name, len(bl.Issues), bl.Total)
+		}
+	})
+
 	t.Run("worklog with start time", func(t *testing.T) {
 		start := time.Now().Add(-2 * time.Hour).Format("2006-01-02 15:04")
 		applied(t)(s.svc.PlanWorklog(ctx, a, "30m", start, ""))

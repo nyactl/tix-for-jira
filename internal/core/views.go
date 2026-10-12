@@ -140,3 +140,28 @@ type AttachmentFile struct {
 	// Data holds the content for small text and image files, for inline use.
 	Data []byte `json:"-"`
 }
+
+type BoardView struct {
+	ID      int    `json:"id"`
+	Name    string `json:"name"`
+	Type    string `json:"type"`
+	Project string `json:"project,omitempty"`
+}
+
+type SprintView struct {
+	ID    int    `json:"id"`
+	Name  string `json:"name"`
+	State string `json:"state"`
+	Start string `json:"start,omitempty"`
+	End   string `json:"end,omitempty"`
+	Goal  string `json:"goal,omitempty"`
+}
+
+// BoardIssues is the user's part of a sprint, or of the backlog when Sprint
+// is nil. Total counts every ticket in it, including other people's.
+type BoardIssues struct {
+	Board  BoardView      `json:"board"`
+	Sprint *SprintView    `json:"sprint,omitempty"`
+	Issues []IssueSummary `json:"issues"`
+	Total  int            `json:"total"`
+}

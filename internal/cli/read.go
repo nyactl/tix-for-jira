@@ -159,7 +159,46 @@ func (a *App) addReadCommands(root *cobra.Command) {
 		return a.print(cmd, me, func() string { return render.Me(me) })
 	})
 
-	root.AddCommand(mine, search, show, comments, history, worklogs, transitions, fields, attachment, linkTypes, projects, types, whoami)
+	boards := noArgCmd(a, "boards", "List boards, optionally of one project", func(cmd *cobra.Command, svc *core.Service) error {
+		project, _ := cmd.Flags().GetString("project")
+		bs, err := svc.Boards(cmd.Context(), project)
+		if err != nil {
+			return err
+		}
+		return a.print(cmd, bs, func() string { return render.Boards(bs) })
+	})
+	boards.Flags().String("project", "", "project key")
+
+	sprint := &cobra.Command{Use: "sprint", Short: "Show sprints and your tickets in them"}
+	sprintShow := keyCmd(a, "show <board>", "Show your tickets in the active sprint of a board (ID or name)", func(cmd *cobra.Command, svc *core.Service, board string) error {
+		max, _ := cmd.Flags().GetInt("max")
+		gs, err := svc.ActiveSprints(cmd.Context(), board, max)
+		if err != nil {
+			return err
+		}
+		return a.print(cmd, gs, func() string { return render.BoardIssues(gs) })
+	})
+	sprintShow.Flags().Int("max", 50, "maximum number of tickets per sprint")
+	sprintList := keyCmd(a, "list <board>", "List the active and future sprints of a board", func(cmd *cobra.Command, svc *core.Service, board string) error {
+		ss, err := svc.Sprints(cmd.Context(), board)
+		if err != nil {
+			return err
+		}
+		return a.print(cmd, ss, func() string { return render.Sprints(ss) })
+	})
+	sprint.AddCommand(sprintShow, sprintList)
+
+	backlog := keyCmd(a, "backlog <board>", "Show your tickets in the backlog of a board (ID or name)", func(cmd *cobra.Command, svc *core.Service, board string) error {
+		max, _ := cmd.Flags().GetInt("max")
+		g, err := svc.Backlog(cmd.Context(), board, max)
+		if err != nil {
+			return err
+		}
+		return a.print(cmd, g, func() string { return render.BoardIssues([]core.BoardIssues{*g}) })
+	})
+	backlog.Flags().Int("max", 50, "maximum number of tickets")
+
+	root.AddCommand(mine, search, show, comments, history, worklogs, transitions, fields, attachment, linkTypes, projects, types, whoami, boards, sprint, backlog)
 }
 
 func keyCmd(a *App, use, short string, run func(*cobra.Command, *core.Service, string) error) *cobra.Command {

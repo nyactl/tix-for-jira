@@ -13,6 +13,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nyactl/tix-for-jira/internal/config"
 	"github.com/nyactl/tix-for-jira/internal/jira"
@@ -282,6 +283,11 @@ func TestSetupCompanyManagedProject(t *testing.T) {
 	}
 	tested.call(t, http.MethodGet, "/rest/agile/1.0/board?projectKeyOrId="+key, nil, &boards)
 	t.Logf("boards visible to the test account: %+v", boards.Values)
+	for _, b := range boards.Values {
+		if b.Type == "scrum" {
+			ensureSprints(t, admin, b.ID)
+		}
+	}
 	t.Logf("setup done: project %s, someone else's ticket %s; use TIX_JIRA_IT_PROJECT=%s TIX_JIRA_IT_OTHER=%s", key, other, key, other)
 }
 
@@ -425,5 +431,42 @@ func ensureCascadingOptions(t *testing.T, admin *rawSite, fieldID string, tree m
 	}
 	if len(children) > 0 {
 		admin.call(t, http.MethodPost, base, map[string]any{"options": children}, &struct{}{})
+	}
+}
+
+// ensureSprints gives a scrum board an active and a future sprint, so the
+// sprint commands have something to show and to move tickets into.
+func ensureSprints(t *testing.T, admin *rawSite, boardID int) {
+	t.Helper()
+	var sprints struct {
+		Values []struct {
+			ID    int    `json:"id"`
+			Name  string `json:"name"`
+			State string `json:"state"`
+		} `json:"values"`
+	}
+	admin.call(t, http.MethodGet, fmt.Sprintf("/rest/agile/1.0/board/%d/sprint?state=active,future", boardID), nil, &sprints)
+	have := map[string]bool{}
+	for _, sp := range sprints.Values {
+		have[sp.State] = true
+	}
+	for _, want := range []struct{ name, state string }{{"tix-for-jira current sprint", "active"}, {"tix-for-jira next sprint", "future"}} {
+		if have[want.state] {
+			continue
+		}
+		var created struct {
+			ID int `json:"id"`
+		}
+		if st := admin.call(t, http.MethodPost, "/rest/agile/1.0/sprint", map[string]any{"name": want.name, "originBoardId": boardID, "goal": "Test the sprint commands"}, &created); st >= 300 {
+			t.Fatalf("creating sprint %q: status %d", want.name, st)
+		}
+		if want.state == "active" {
+			start := time.Now().UTC()
+			body := map[string]any{"state": "active", "startDate": start.Format(time.RFC3339), "endDate": start.AddDate(0, 0, 14).Format(time.RFC3339)}
+			if st := admin.call(t, http.MethodPost, fmt.Sprintf("/rest/agile/1.0/sprint/%d", created.ID), body, &struct{}{}); st >= 300 {
+				t.Fatalf("starting sprint %d: status %d", created.ID, st)
+			}
+		}
+		t.Logf("created %s sprint %d on board %d", want.state, created.ID, boardID)
 	}
 }

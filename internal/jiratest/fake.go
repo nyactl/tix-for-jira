@@ -65,6 +65,7 @@ type Issue struct {
 	Worklogs                                      []Worklog
 	Attachments                                   []Attachment
 	Watchers                                      []string // account IDs
+	Sprint                                        int      // 0: backlog
 }
 
 // Fake is the fake Jira site.
@@ -73,10 +74,12 @@ type Fake struct {
 	mu  sync.Mutex
 	srv *httptest.Server
 
-	Users  map[string]*User // accountID -> user
-	Issues map[string]*Issue
-	Links  []Link
-	JQL    []string // every JQL query received
+	Users   map[string]*User // accountID -> user
+	Issues  map[string]*Issue
+	Links   []Link
+	Boards  []Board
+	Sprints []Sprint
+	JQL     []string // every JQL query received
 	// UnscopedSearch makes search ignore "assignee = currentUser()", as a
 	// crafted query could, to test that callers re-check every result.
 	UnscopedSearch bool
@@ -275,6 +278,9 @@ func (f *Fake) serve(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	p := r.URL.Path
+	if f.agile(w, r, me) {
+		return
+	}
 	switch {
 	case p == "/rest/api/3/myself":
 		writeJSON(w, 200, f.userJSON(me.AccountID))

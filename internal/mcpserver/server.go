@@ -121,6 +121,15 @@ type projectInput struct {
 	Project string `json:"project" jsonschema:"Project key"`
 }
 
+type boardsInput struct {
+	Project string `json:"project,omitempty" jsonschema:"Optional project key"`
+}
+
+type boardInput struct {
+	Board string `json:"board" jsonschema:"Board ID or name; see list_boards"`
+	Max   int    `json:"max,omitempty" jsonschema:"Maximum number of tickets (default 50)"`
+}
+
 type emptyInput struct{}
 
 func (s *server) registerReads(srv *mcp.Server) {
@@ -211,6 +220,38 @@ func (s *server) registerReads(srv *mcp.Server) {
 				return nil, nil, err
 			}
 			return text(render.Projects(ps))
+		})
+	add(srv, "list_boards", "List Jira Software boards, optionally of one project.", readOnly(),
+		func(ctx context.Context, _ *mcp.CallToolRequest, in boardsInput) (*mcp.CallToolResult, any, error) {
+			bs, err := s.svc.Boards(ctx, in.Project)
+			if err != nil {
+				return nil, nil, err
+			}
+			return text(render.Boards(bs))
+		})
+	add(srv, "list_sprints", "List the active and future sprints of a board.", readOnly(),
+		func(ctx context.Context, _ *mcp.CallToolRequest, in boardInput) (*mcp.CallToolResult, any, error) {
+			ss, err := s.svc.Sprints(ctx, in.Board)
+			if err != nil {
+				return nil, nil, err
+			}
+			return text(render.Sprints(ss))
+		})
+	add(srv, "get_active_sprint", "Show the user's tickets in the active sprint of a board, in board order, with the total number of tickets in the sprint.", readOnly(),
+		func(ctx context.Context, _ *mcp.CallToolRequest, in boardInput) (*mcp.CallToolResult, any, error) {
+			gs, err := s.svc.ActiveSprints(ctx, in.Board, in.Max)
+			if err != nil {
+				return nil, nil, err
+			}
+			return text(render.BoardIssues(gs))
+		})
+	add(srv, "get_backlog", "Show the user's tickets in the backlog of a board, in board order, with the total number of tickets in the backlog.", readOnly(),
+		func(ctx context.Context, _ *mcp.CallToolRequest, in boardInput) (*mcp.CallToolResult, any, error) {
+			g, err := s.svc.Backlog(ctx, in.Board, in.Max)
+			if err != nil {
+				return nil, nil, err
+			}
+			return text(render.BoardIssues([]core.BoardIssues{*g}))
 		})
 	add(srv, "list_issue_types", "List the issue types the user can create in a project.", readOnly(),
 		func(ctx context.Context, _ *mcp.CallToolRequest, in projectInput) (*mcp.CallToolResult, any, error) {
