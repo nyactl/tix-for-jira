@@ -302,7 +302,20 @@ func TestIntegration(t *testing.T) {
 	})
 
 	t.Run("subtask", func(t *testing.T) {
-		msg := applied(t)(s.svc.PlanCreate(ctx, core.CreateInput{Project: s.project, Type: "Subtask", Summary: "tix-for-jira integration subtask " + s.run, Parent: a, Labels: []string{"tix-for-jira-it"}}))
+		types, err := s.svc.IssueTypes(ctx, s.project)
+		if err != nil {
+			t.Fatal(err)
+		}
+		subtaskType := ""
+		for _, it := range types {
+			if it.Subtask {
+				subtaskType = it.Name
+			}
+		}
+		if subtaskType == "" {
+			t.Skip("the test project has no subtask type")
+		}
+		msg := applied(t)(s.svc.PlanCreate(ctx, core.CreateInput{Project: s.project, Type: subtaskType, Summary: "tix-for-jira integration subtask " + s.run, Parent: a, Labels: []string{"tix-for-jira-it"}}))
 		var sub string
 		if _, err := fmt.Sscanf(msg, "Created %s", &sub); err != nil {
 			t.Fatalf("unexpected create result %q", msg)

@@ -304,7 +304,7 @@ func (s *Service) PlanCreate(ctx context.Context, in CreateInput) (*Plan, error)
 	var typeNames []string
 	for i := range types {
 		typeNames = append(typeNames, types[i].Name)
-		if strings.EqualFold(types[i].Name, strings.TrimSpace(in.Type)) {
+		if looseName(types[i].Name) == looseName(in.Type) {
 			typ = &types[i]
 		}
 	}

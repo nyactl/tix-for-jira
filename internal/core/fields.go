@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/nyactl/tix-for-jira/internal/jira"
 )
@@ -242,4 +243,16 @@ func currentEstimate(issue *jira.Issue, sub string) string {
 		return tt.OriginalEstimate
 	}
 	return tt.RemainingEstimate
+}
+
+// looseName compares names the way people type them: "subtask", "Sub-task"
+// and "Sub task" are the same issue type.
+func looseName(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(s) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }

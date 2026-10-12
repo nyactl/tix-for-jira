@@ -653,3 +653,15 @@ func TestPlanUpdateEstimates(t *testing.T) {
 		t.Error("estimate listed twice accepted")
 	}
 }
+
+func TestLooseName(t *testing.T) {
+	t.Parallel()
+	for _, pair := range [][2]string{{"Sub-task", "subtask"}, {"Sub task", "SUBTASK"}, {"Story", " story "}} {
+		if looseName(pair[0]) != looseName(pair[1]) {
+			t.Errorf("%q and %q should match", pair[0], pair[1])
+		}
+	}
+	if looseName("Task") == looseName("Subtask") {
+		t.Error("Task and Subtask must differ")
+	}
+}
