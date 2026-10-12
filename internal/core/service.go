@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nyactl/tix-for-jira/internal/adf"
+	adf "github.com/nyactl/go-adf"
 	"github.com/nyactl/tix-for-jira/internal/config"
 	"github.com/nyactl/tix-for-jira/internal/jira"
 	"github.com/nyactl/tix-for-jira/internal/privacy"
@@ -100,14 +100,40 @@ func (s *Service) learn(issue *jira.Issue) {
 	}
 }
 
-// markdown renders ADF with people replaced, then redacts known names in
-// the remaining text.
+// markdown renders ADF with people replaced. Known names are redacted in
+// each text piece before conversion, where Markdown escaping cannot split
+// them, and again in the result, for names spread over several pieces.
 func (s *Service) markdown(raw json.RawMessage) string {
-	md, err := adf.ToMarkdown(raw, s.people.Mention)
+	s0 := strings.TrimSpace(string(raw))
+	if strings.HasPrefix(s0, "{") {
+		var doc adf.Node
+		if err := json.Unmarshal(raw, &doc); err != nil {
+			return "(content could not be converted)"
+		}
+		s.redactText(&doc)
+		redacted, err := json.Marshal(doc)
+		if err != nil {
+			return "(content could not be converted)"
+		}
+		raw = redacted
+	}
+	md, err := adf.ToMarkdown(raw, adf.WithMentionText(s.people.Mention))
 	if err != nil {
 		return "(content could not be converted)"
 	}
 	return s.people.Text(md)
+}
+
+func (s *Service) redactText(n *adf.Node) {
+	if n.Text != "" {
+		n.Text = s.people.Text(n.Text)
+	}
+	if t, ok := n.Attrs["text"].(string); ok && n.Type != "mention" {
+		n.Attrs["text"] = s.people.Text(t)
+	}
+	for i := range n.Content {
+		s.redactText(&n.Content[i])
+	}
 }
 
 // toADF converts Markdown written by the assistant or user into ADF,
@@ -116,7 +142,12 @@ func (s *Service) toADF(md string) (json.RawMessage, error) {
 	if md == "" {
 		return nil, nil
 	}
-	return adf.FromMarkdown(md, s.people.Resolve)
+	doc, err := adf.FromMarkdown(md, adf.WithMentionResolver(s.people.Resolve))
+	var me *adf.MentionError
+	if errors.As(err, &me) {
+		return nil, fmt.Errorf("cannot mention @[%s]: only people already shown in this session can be mentioned", me.Label)
+	}
+	return doc, err
 }
 
 func (s *Service) fieldDefs(ctx context.Context) (map[string]jira.Field, error) {

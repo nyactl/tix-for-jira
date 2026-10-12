@@ -20,6 +20,10 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 - Web links: ticket details list them, and `tix weblink KEY URL [TITLE]` / MCP `add_web_link` add one (http and https only).
 - Scoped API tokens: `tix auth login` recognises them and routes all requests through the Atlassian API gateway. A missing scope is named in the error. The README lists the scopes per use case.
 
+### Changed
+
+- Rich text is converted by the [go-adf](https://github.com/nyactl/go-adf) module. Comments and fields written as Markdown now always produce valid ADF (a heading in a list item or a nested quote no longer makes Jira reject the change), and text from Jira that looks like Markdown, such as `#`, `*` or `[x]`, is escaped so it is shown literally.
+
 ## [0.1.1] - 2026-10-09
 
 ### Added

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nyactl/tix-for-jira/internal/adf"
+	adf "github.com/nyactl/go-adf"
 	"github.com/nyactl/tix-for-jira/internal/core"
 	"github.com/nyactl/tix-for-jira/internal/jira"
 	"github.com/nyactl/tix-for-jira/internal/secret"
@@ -114,9 +114,9 @@ func TestTwoPeople(t *testing.T) {
 	if err := other.jc.AssignIssue(ctx, handed, me.AccountID); err != nil {
 		t.Fatal(err)
 	}
-	comment, err := adf.FromMarkdown("Ping from "+other.me.DisplayName+": please have a look, @[tested]", func(label string) (string, string, bool) {
+	comment, err := adf.FromMarkdown("Ping from "+other.me.DisplayName+": please have a look, @[tested]", adf.WithMentionResolver(func(label string) (string, string, bool) {
 		return me.AccountID, me.DisplayName, label == "tested"
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
