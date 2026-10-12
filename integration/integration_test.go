@@ -7,12 +7,8 @@ package integration
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
-	"io"
-	"mime/multipart"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -76,7 +72,7 @@ func setup(t *testing.T) *site {
 	if err != nil {
 		t.Fatal(err)
 	}
-	jc := jira.New(cfg.Site, cfg.Email, token, "integration")
+	jc := newClient(cfg, token)
 	svc, err := core.New(context.Background(), jc, cfg.Privacy)
 	if err != nil {
 		t.Fatal(err)
@@ -112,6 +108,16 @@ func testSiteConfig(t *testing.T, profile string) *config.Config {
 
 // applied returns a function that applies a plan, failing the test on any
 // error; use it as applied(t)(svc.PlanX(...)).
+// newClient talks to the test site as the profile's account, through the
+// API gateway when the profile uses a scoped token.
+func newClient(cfg *config.Config, token string) *jira.Client {
+	var opts []jira.Option
+	if cfg.ScopedToken {
+		opts = append(opts, jira.WithGateway(jira.Gateway, cfg.CloudID))
+	}
+	return jira.New(cfg.Site, cfg.Email, token, "integration", opts...)
+}
+
 func applied(t *testing.T) func(*core.Plan, error) string {
 	return func(p *core.Plan, err error) string {
 		t.Helper()
@@ -144,23 +150,8 @@ func (s *site) create(t *testing.T, summary, description string) string {
 // upload, so this is test-only.
 func (s *site) upload(t *testing.T, key, name string, data []byte) {
 	t.Helper()
-	var body bytes.Buffer
-	w := multipart.NewWriter(&body)
-	part, _ := w.CreateFormFile("file", name)
-	_, _ = part.Write(data)
-	_ = w.Close()
-	req, _ := http.NewRequest(http.MethodPost, s.cfg.Site+"/rest/api/3/issue/"+key+"/attachments", &body)
-	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(s.cfg.Email+":"+s.token)))
-	req.Header.Set("X-Atlassian-Token", "no-check")
-	req.Header.Set("Content-Type", w.FormDataContentType())
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		t.Fatalf("upload: HTTP %d: %s", resp.StatusCode, b)
+	if _, err := newClient(s.cfg, s.token).AddAttachment(context.Background(), key, name, data); err != nil {
+		t.Fatalf("upload: %v", err)
 	}
 }
 

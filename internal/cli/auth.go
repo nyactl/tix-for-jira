@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -66,7 +67,7 @@ func (a *App) authCmd() *cobra.Command {
 				return errors.New("no token entered")
 			}
 			email = strings.TrimSpace(email)
-			me, err := a.client(site, email, token).Myself(cmd.Context())
+			me, cloudID, err := a.verifyToken(cmd.Context(), site, email, token)
 			if err != nil {
 				return loginError(site, email, err)
 			}
@@ -75,7 +76,8 @@ func (a *App) authCmd() *cobra.Command {
 					return err
 				}
 			}
-			cfg := &config.Config{Site: site, Email: email, Privacy: config.PrivacyOwn, TokenExpiry: strings.TrimSpace(expires)}
+			cfg := &config.Config{Site: site, Email: email, Privacy: config.PrivacyOwn, TokenExpiry: strings.TrimSpace(expires),
+				ScopedToken: cloudID != "", CloudID: cloudID}
 			if prev != nil {
 				cfg.Privacy = prev.Privacy
 				cfg.AllowDevBuilds = prev.AllowDevBuilds && prev.Site == cfg.Site
@@ -92,7 +94,11 @@ func (a *App) authCmd() *cobra.Command {
 			if err := cfg.Save(prof); err != nil {
 				return err
 			}
-			_, err = fmt.Fprintf(a.Out, "Logged in as %s on %s (profile %s). Privacy mode: %s.\n", me.DisplayName, cfg.Site, prof, cfg.Privacy)
+			kind := "classic token"
+			if cfg.ScopedToken {
+				kind = "scoped token, via the Atlassian API gateway"
+			}
+			_, err = fmt.Fprintf(a.Out, "Logged in as %s on %s (profile %s, %s). Privacy mode: %s.\n", me.DisplayName, cfg.Site, prof, kind, cfg.Privacy)
 			return err
 		},
 	}
@@ -185,7 +191,11 @@ func (a *App) configCmd() *cobra.Command {
 			}
 			path, _ := config.Path(prof)
 			return a.print(cmd, cfg, func() string {
-				return fmt.Sprintf("- Profile: %s\n- Site: %s\n- Email: %s\n- Privacy: %s\n- Token expiry: %s\n- Development builds: %v\n- File: %s\n", prof, cfg.Site, cfg.Email, cfg.Privacy, orDash(cfg.TokenExpiry), cfg.AllowDevBuilds, path)
+				token := "classic"
+				if cfg.ScopedToken {
+					token = "scoped (via the Atlassian API gateway, cloud ID " + cfg.CloudID + ")"
+				}
+				return fmt.Sprintf("- Profile: %s\n- Site: %s\n- Email: %s\n- Token: %s\n- Privacy: %s\n- Token expiry: %s\n- Development builds: %v\n- File: %s\n", prof, cfg.Site, cfg.Email, token, cfg.Privacy, orDash(cfg.TokenExpiry), cfg.AllowDevBuilds, path)
 			})
 		},
 	}
@@ -318,4 +328,27 @@ func orDash(s string) string {
 		return "-"
 	}
 	return s
+}
+
+// verifyToken checks the token against the site and, when the site rejects
+// it, through the API gateway, which is where scoped tokens work. cloudID is
+// empty for a classic token.
+func (a *App) verifyToken(ctx context.Context, site, email, token string) (*jira.User, string, error) {
+	me, err := a.client(site, email, token, "").Myself(ctx)
+	if !errors.Is(err, jira.ErrUnauthorized) {
+		return me, "", err
+	}
+	siteErr := err
+	cloudID, err := a.client(site, email, token, "").CloudID(ctx)
+	if err != nil {
+		return nil, "", siteErr
+	}
+	me, err = a.client(site, email, token, cloudID).Myself(ctx)
+	switch {
+	case errors.Is(err, jira.ErrMissingScope):
+		return nil, "", fmt.Errorf("the scoped token is valid but lacks read:jira-user, which tix needs to identify you: %w", err)
+	case err != nil:
+		return nil, "", siteErr
+	}
+	return me, cloudID, nil
 }

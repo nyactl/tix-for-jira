@@ -29,7 +29,7 @@ Release archives are signed with cosign; see [RELEASING.md](RELEASING.md#verifyi
 
 ## Set up
 
-1. Create an API token at <https://id.atlassian.com/manage-profile/security/api-tokens>. Note its expiry date.
+1. Create an API token at <https://id.atlassian.com/manage-profile/security/api-tokens>, preferably a scoped one (see [Scoped API tokens](#scoped-api-tokens)). Note its expiry date.
 2. Log in:
 
    ```sh
@@ -41,6 +41,19 @@ Release archives are signed with cosign; see [RELEASING.md](RELEASING.md#verifyi
 3. Check: `tix auth status`
 
 If your organisation has disabled personal API tokens, tix-for-jira cannot connect.
+
+### Scoped API tokens
+
+A classic API token can do everything your account can do, in every Atlassian product. A scoped token ("Create API token with scopes", app **Jira**) is limited to the scopes you pick, so a leaked token exposes less, and a token without write scopes makes Jira itself refuse changes. `tix auth login` recognises a scoped token and sends all requests through Atlassian's API gateway (`api.atlassian.com`), which is the only place scoped tokens work.
+
+| Use | Scopes |
+|---|---|
+| Read tickets | `read:jira-work`, `read:jira-user` |
+| Also change tickets | add `write:jira-work` |
+| Read boards and sprints | add `read:board-scope:jira-software`, `read:sprint:jira-software`, `read:issue-details:jira`, `read:project:jira`, `read:jql:jira`, `read:issue:jira-software` |
+| Also move tickets between sprints and the backlog | add `write:sprint:jira-software`, `write:board-scope:jira-software` |
+
+If a scope is missing, tix names the scopes the failed request needs.
 
 ## Use from the terminal
 

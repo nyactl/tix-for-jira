@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -134,4 +135,33 @@ func (c *Client) MoveToSprint(ctx context.Context, sprintID int, keys ...string)
 
 func (c *Client) MoveToBacklog(ctx context.Context, keys ...string) error {
 	return c.do(ctx, http.MethodPost, "/rest/agile/1.0/backlog/issue", nil, map[string][]string{"issues": keys}, nil)
+}
+
+// agileEndpoints lists the scoped-token scopes of the Jira Software
+// endpoints tix uses, as given in Atlassian's API specification. The core
+// Jira endpoints are covered by read:jira-work, write:jira-work and
+// read:jira-user.
+var agileEndpoints = []struct {
+	method string
+	path   *regexp.Regexp
+	scopes string
+}{
+	{http.MethodGet, regexp.MustCompile(`^/rest/agile/1\.0/board$`), "read:board-scope:jira-software and read:project:jira"},
+	{http.MethodGet, regexp.MustCompile(`^/rest/agile/1\.0/board/[0-9]+$`), "read:board-scope:jira-software and read:issue-details:jira"},
+	{http.MethodGet, regexp.MustCompile(`^/rest/agile/1\.0/board/[0-9]+/sprint$`), "read:sprint:jira-software"},
+	{http.MethodGet, regexp.MustCompile(`^/rest/agile/1\.0/board/[0-9]+/backlog$`), "read:board-scope:jira-software and read:issue-details:jira"},
+	{http.MethodGet, regexp.MustCompile(`^/rest/agile/1\.0/sprint/[0-9]+$`), "read:sprint:jira-software"},
+	{http.MethodGet, regexp.MustCompile(`^/rest/agile/1\.0/sprint/[0-9]+/issue$`), "read:sprint:jira-software, read:issue-details:jira and read:jql:jira"},
+	{http.MethodPost, regexp.MustCompile(`^/rest/agile/1\.0/sprint/[0-9]+/issue$`), "write:sprint:jira-software"},
+	{http.MethodPost, regexp.MustCompile(`^/rest/agile/1\.0/backlog/issue$`), "write:board-scope:jira-software"},
+	{http.MethodGet, regexp.MustCompile(`^/rest/agile/1\.0/issue/[^/]+$`), "read:issue:jira-software"},
+}
+
+func agileScopes(method, path string) string {
+	for _, e := range agileEndpoints {
+		if e.method == method && e.path.MatchString(path) {
+			return e.scopes
+		}
+	}
+	return ""
 }

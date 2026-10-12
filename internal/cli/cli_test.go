@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nyactl/tix-for-jira/internal/config"
+	"github.com/nyactl/tix-for-jira/internal/jira"
 	"github.com/nyactl/tix-for-jira/internal/jiratest"
 	"github.com/nyactl/tix-for-jira/internal/secret"
 )
@@ -85,7 +86,7 @@ func (e *env) runStdin(t *testing.T, stdin string, args ...string) (string, stri
 	t.Helper()
 	var out, errOut bytes.Buffer
 	app := &App{Version: e.version(), In: strings.NewReader(stdin), Out: &out, Err: &errOut, TTY: e.tty, Secrets: e.secrets, Transport: e.fake.Transport(),
-		Now: func() time.Time { return time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC) }}
+		Gateway: e.fake.URL(), Now: func() time.Time { return time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC) }}
 	err := app.Execute(context.Background(), args)
 	return out.String(), errOut.String(), err
 }
@@ -419,5 +420,58 @@ func TestDevBuildsOptIn(t *testing.T) {
 	}
 	if _, _, err := e.run(t, "config", "dev-builds", "off", "--profile", "test"); err != nil {
 		t.Errorf("switching off needs no terminal: %v", err)
+	}
+}
+
+func TestLoginWithScopedToken(t *testing.T) {
+	e := newEnv(t)
+	e.fake.AddUser(jiratest.User{AccountID: "acc-me", DisplayName: "Max Mustermann", Email: "me@example.com", Token: "tok-scoped",
+		Scopes: []string{"read:jira-user", "read:jira-work", "write:jira-work"}})
+	e.tty.noTTY = true
+	out, _, err := e.runStdin(t, "tok-scoped\n", "auth", "login", "--site", e.fake.URL(), "--email", "me@example.com", "--expires", "", "--with-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "scoped token, via the Atlassian API gateway") {
+		t.Errorf("out = %q", out)
+	}
+	cfg, err := config.Load("")
+	if err != nil || !cfg.ScopedToken || cfg.CloudID != jiratest.CloudID {
+		t.Fatalf("config = %+v, %v", cfg, err)
+	}
+
+	out, _, err = e.run(t, "show", "PROJ-1")
+	if err != nil || !strings.Contains(out, "# PROJ-1: Mine") || !strings.Contains(out, e.fake.URL()+"/browse/PROJ-1") {
+		t.Errorf("show via gateway: %q, %v", out, err)
+	}
+	gateway := false
+	for _, r := range e.fake.Requests {
+		gateway = gateway || strings.HasPrefix(r, "GET /ex/jira/"+jiratest.CloudID+"/rest/api/3/issue/PROJ-1")
+	}
+	if !gateway {
+		t.Errorf("requests did not use the gateway: %v", e.fake.Requests)
+	}
+
+	// Boards need Jira Software scopes this token does not have.
+	_, _, err = e.run(t, "boards")
+	if !errors.Is(err, jira.ErrMissingScope) || !strings.Contains(err.Error(), "read:board-scope:jira-software and read:project:jira") {
+		t.Errorf("boards: %v", err)
+	}
+	out, _, _ = e.run(t, "config", "show")
+	if !strings.Contains(out, "Token: scoped") {
+		t.Errorf("config show = %q", out)
+	}
+}
+
+func TestLoginScopedTokenWithoutUserScope(t *testing.T) {
+	e := newEnv(t)
+	e.fake.AddUser(jiratest.User{AccountID: "acc-me", DisplayName: "Max Mustermann", Email: "me@example.com", Token: "tok-scoped", Scopes: []string{"read:jira-work"}})
+	e.tty.noTTY = true
+	_, _, err := e.runStdin(t, "tok-scoped\n", "auth", "login", "--site", e.fake.URL(), "--email", "me@example.com", "--expires", "", "--with-token")
+	if err == nil || !strings.Contains(err.Error(), "read:jira-user") {
+		t.Fatalf("err = %v", err)
+	}
+	if _, err := config.Load(""); !errors.Is(err, config.ErrNotConfigured) {
+		t.Errorf("config saved despite failed login: %v", err)
 	}
 }

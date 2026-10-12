@@ -33,6 +33,8 @@ type App struct {
 	Now      func() time.Time
 	// Transport overrides the HTTP transport in tests.
 	Transport http.RoundTripper
+	// Gateway overrides Atlassian's API gateway in tests.
+	Gateway string
 }
 
 // Default returns the production dependencies.
@@ -163,17 +165,30 @@ func (a *App) service(cmd *cobra.Command) (*core.Service, *config.Config, error)
 	if err != nil {
 		return nil, nil, err
 	}
-	svc, err := core.New(ctx, a.client(cfg.Site, cfg.Email, token), cfg.Privacy)
+	cloudID := ""
+	if cfg.ScopedToken {
+		cloudID = cfg.CloudID
+	}
+	svc, err := core.New(ctx, a.client(cfg.Site, cfg.Email, token, cloudID), cfg.Privacy)
 	if errors.Is(err, jira.ErrUnauthorized) && cfg.TokenExpiry != "" {
 		err = fmt.Errorf("%w (recorded expiry: %s)", err, cfg.TokenExpiry)
 	}
 	return svc, cfg, err
 }
 
-func (a *App) client(site, email, token string) *jira.Client {
+// client returns a Jira client; a non-empty cloudID routes it through the
+// API gateway, as scoped tokens require.
+func (a *App) client(site, email, token, cloudID string) *jira.Client {
 	var opts []jira.Option
 	if a.Transport != nil {
 		opts = append(opts, jira.WithTransport(a.Transport))
+	}
+	if cloudID != "" {
+		gw := a.Gateway
+		if gw == "" {
+			gw = jira.Gateway
+		}
+		opts = append(opts, jira.WithGateway(gw, cloudID))
 	}
 	return jira.New(site, email, token, a.Version, opts...)
 }

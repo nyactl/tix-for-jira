@@ -35,7 +35,7 @@ func newRawSite(t *testing.T, profile string) *rawSite {
 	if err != nil {
 		t.Fatal(err)
 	}
-	me, err := jira.New(cfg.Site, cfg.Email, token, "integration").Myself(context.Background())
+	me, err := newClient(cfg, token).Myself(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,11 @@ func (r *rawSite) call(t *testing.T, method, path string, body, out any) int {
 		b, _ := json.Marshal(body)
 		rd = bytes.NewReader(b)
 	}
-	req, err := http.NewRequest(method, r.cfg.Site+path, rd)
+	base := r.cfg.Site
+	if r.cfg.ScopedToken {
+		base = jira.Gateway + "/ex/jira/" + r.cfg.CloudID
+	}
+	req, err := http.NewRequest(method, base+path, rd)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,7 +270,7 @@ func TestSetupCompanyManagedProject(t *testing.T) {
 	}}, &mine); st != 201 {
 		t.Fatalf("the test account cannot create tickets in %s: HTTP %d", key, st)
 	}
-	closeWhenDone(t, jira.New(tested.cfg.Site, tested.cfg.Email, tested.token, "integration"), mine.Key)
+	closeWhenDone(t, newClient(tested.cfg, tested.token), mine.Key)
 	var meta struct {
 		Fields map[string]json.RawMessage `json:"fields"`
 	}

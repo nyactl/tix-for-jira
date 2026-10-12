@@ -23,7 +23,15 @@ import (
 
 type User struct {
 	AccountID, DisplayName, Email, Token string
+	// Scopes makes Token a scoped API token: it only works through the
+	// gateway path and only for requests its scopes cover.
+	Scopes []string
 }
+
+// CloudID is the fake site's cloud ID.
+const CloudID = "0b8e7c1a-5d2f-4e3a-9b6c-1f2e3d4c5b6a"
+
+const gatewayPrefix = "/ex/jira/" + CloudID
 
 type Comment struct {
 	ID, Author, Created string
@@ -263,10 +271,28 @@ func (f *Fake) serve(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.Requests = append(f.Requests, r.Method+" "+r.URL.Path)
+	if r.URL.Path == "/_edge/tenant_info" {
+		writeJSON(w, 200, map[string]string{"cloudId": CloudID})
+		return
+	}
+	viaGateway := strings.HasPrefix(r.URL.Path, gatewayPrefix+"/")
+	if viaGateway {
+		r.URL.Path = strings.TrimPrefix(r.URL.Path, gatewayPrefix)
+	}
 	me := f.caller(r)
 	if me == nil {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
+	}
+	if me.Scopes != nil {
+		if !viaGateway {
+			writeJSON(w, 401, map[string]string{"message": "Client must be authenticated to access this resource."})
+			return
+		}
+		if !slices.Contains(me.Scopes, requiredScope(r)) {
+			writeJSON(w, 401, map[string]any{"code": 401, "message": "Unauthorized; scope does not match"})
+			return
+		}
 	}
 	var body map[string]any
 	if r.Body != nil && (r.Method == http.MethodPost || r.Method == http.MethodPut) {
@@ -801,4 +827,21 @@ func (f *Fake) attachment(w http.ResponseWriter, r *http.Request, id string) {
 		}
 	}
 	errJSON(w, 404, "attachment not found")
+}
+
+// requiredScope is a simplified model of the gateway's scope check.
+func requiredScope(r *http.Request) string {
+	write := r.Method != http.MethodGet
+	switch {
+	case strings.HasPrefix(r.URL.Path, "/rest/agile/"):
+		if write {
+			return "write:sprint:jira-software"
+		}
+		return "read:board-scope:jira-software"
+	case r.URL.Path == "/rest/api/3/myself":
+		return "read:jira-user"
+	case write:
+		return "write:jira-work"
+	}
+	return "read:jira-work"
 }

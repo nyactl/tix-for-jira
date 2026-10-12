@@ -39,7 +39,7 @@ func setupOther(t *testing.T, s *site) *otherPerson {
 	if err != nil {
 		t.Fatal(err)
 	}
-	jc := jira.New(cfg.Site, cfg.Email, token, "integration")
+	jc := newClient(cfg, token)
 	me, err := jc.Myself(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -102,7 +102,7 @@ func TestTwoPeople(t *testing.T) {
 	s := setup(t)
 	other := setupOther(t, s)
 	ctx := context.Background()
-	me, err := jira.New(s.cfg.Site, s.cfg.Email, s.token, "integration").Myself(ctx)
+	me, err := newClient(s.cfg, s.token).Myself(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
