@@ -7,7 +7,7 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 ### Added
 
 - `tix open KEY` opens one of your tickets in the browser; `--print` shows the URL instead.
-- `tix pick` lists your tickets in the terminal: choose one with the arrow keys, then show it, open it in the browser or comment on it (the comment is confirmed as usual).
+- `tix pick` lists your tickets in the terminal: move with the arrow keys, show a ticket full screen, open it in the browser or comment on it (confirmed as usual), and keep going until you quit with q.
 - Time in status: `tix history KEY --status-times` and MCP `get_status_times` show how long a ticket spent in each status and how often it entered it.
 - Saved searches per profile (`tix config search add NAME JQL`, `tix search @NAME`, MCP `search_issues` with `@NAME` and `list_saved_searches`), limited to the privacy scope like every search. A default project (`tix config project KEY`) for `tix create` and MCP `create_issue` without a project.
 - MCP prompts `morning-overview`, `ticket-summary` and `sprint-status`, which use only the read tools.

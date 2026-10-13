@@ -17,18 +17,27 @@ import (
 )
 
 // yes answers every confirmation with "y" and picks the line with key.
-type yes struct{ key string }
+type yes struct{ key, viewed string }
 
-func (yes) Prompt(string) (string, error) { return "y", nil }
-func (yes) Secret(string) (string, error) { return "", errors.New("no secrets in tests") }
+func (*yes) Prompt(string) (string, error) { return "y", nil }
+func (*yes) Secret(string) (string, error) { return "", errors.New("no secrets in tests") }
 
-func (y yes) Pick(_ string, lines []string) (int, cli.PickAction, error) {
+// Pick shows the line with key once, then quits.
+func (y *yes) Pick(_ string, lines []string, _ int, _ string) (int, cli.PickAction, error) {
+	if y.viewed != "" {
+		return 0, cli.PickQuit, nil
+	}
 	for i, l := range lines {
 		if strings.HasPrefix(l, y.key+" ") {
 			return i, cli.PickShow, nil
 		}
 	}
 	return 0, cli.PickQuit, nil
+}
+
+func (y *yes) View(_, text string) error {
+	y.viewed = text
+	return nil
 }
 
 // TestCLISavedSearchAndDefaultProject runs the real command line against the
@@ -42,11 +51,11 @@ func TestCLISavedSearchAndDefaultProject(t *testing.T) {
 	if err := cfg.Save("test"); err != nil {
 		t.Fatal(err)
 	}
-	var picked string
+	term := &yes{}
 	run := func(args ...string) string {
 		t.Helper()
 		var out, errOut bytes.Buffer
-		app := &cli.App{Version: "dev", In: strings.NewReader(""), Out: &out, Err: &errOut, TTY: yes{key: picked},
+		app := &cli.App{Version: "dev", In: strings.NewReader(""), Out: &out, Err: &errOut, TTY: term,
 			Secrets: keychain.New("tix-for-jira"), Now: time.Now}
 		if err := app.Execute(context.Background(), append(args, "--profile", "test")); err != nil {
 			t.Fatalf("tix %s: %v\n%s", strings.Join(args, " "), err, errOut.String())
@@ -74,8 +83,9 @@ func TestCLISavedSearchAndDefaultProject(t *testing.T) {
 	}
 
 	// The picker offers the new ticket, and choosing it shows it.
-	picked = key[1]
-	if out := run("pick", "--project", s.project); !strings.Contains(out, "# "+key[1]+":") {
-		t.Errorf("pick did not show %s: %q", key[1], out)
+	term.key = key[1]
+	run("pick", "--project", s.project)
+	if !strings.Contains(term.viewed, "# "+key[1]+":") {
+		t.Errorf("pick did not show %s: %q", key[1], term.viewed)
 	}
 }

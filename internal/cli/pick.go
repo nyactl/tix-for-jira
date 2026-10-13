@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -15,7 +14,7 @@ import (
 func (a *App) pickCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "pick",
-		Short: "Choose one of your tickets with the arrow keys, then show, open or comment on it",
+		Short: "Browse your tickets with the arrow keys: show, open or comment on them until you quit",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			picker, ok := a.TTY.(Picker)
@@ -41,44 +40,71 @@ func (a *App) pickCmd() *cobra.Command {
 			for i, is := range list {
 				lines[i] = fmt.Sprintf("%-10s [%s] %s (%s)", is.Key, is.Status, is.Summary, is.Type)
 			}
-			i, action, err := picker.Pick(fmt.Sprintf("Your tickets on %s", svc.Site()), lines)
-			if err != nil {
-				return err
+			title := "Your tickets on " + svc.Site()
+			cursor, status := 0, ""
+			for {
+				i, action, err := picker.Pick(title, lines, cursor, status)
+				if err != nil {
+					return err
+				}
+				if action == PickQuit {
+					return nil
+				}
+				cursor, status = i, ""
+				key := list[i].Key
+				switch action {
+				case PickShow:
+					d, err := svc.Issue(cmd.Context(), key)
+					if err != nil {
+						status = key + ": " + err.Error()
+						continue
+					}
+					if err := picker.View(key+" "+d.Summary, render.Issue(d)); err != nil {
+						return err
+					}
+				case PickOpen:
+					status = a.pickOpen(cmd, svc, key)
+				case PickComment:
+					status = a.pickComment(cmd, svc, key)
+				}
 			}
-			key := list[i].Key
-			switch action {
-			case PickShow:
-				d, err := svc.Issue(cmd.Context(), key)
-				if err != nil {
-					return err
-				}
-				return a.print(cmd, d, func() string { return render.Issue(d) })
-			case PickOpen:
-				d, err := svc.Issue(cmd.Context(), key)
-				if err != nil {
-					return err
-				}
-				if a.Browse == nil {
-					_, err := fmt.Fprintln(a.Out, d.URL)
-					return err
-				}
-				return a.Browse(cmd.Context(), d.URL)
-			case PickComment:
-				body, err := a.TTY.Prompt(fmt.Sprintf("Comment on %s (Markdown, one line; empty to cancel): ", key))
-				if err != nil {
-					return err
-				}
-				if strings.TrimSpace(body) == "" {
-					return errors.New("no comment written; nothing was changed")
-				}
-				p, err := svc.PlanComment(cmd.Context(), key, body)
-				return a.apply(cmd, svc, p, err)
-			}
-			return nil
 		},
 	}
 	cmd.Flags().Bool("all", false, "include tickets that are done")
 	cmd.Flags().String("project", "", "only this project")
 	cmd.Flags().String("text", "", "full-text filter")
 	return cmd
+}
+
+// pickOpen opens a ticket in the browser and returns the status to show.
+func (a *App) pickOpen(cmd *cobra.Command, svc *core.Service, key string) string {
+	d, err := svc.Issue(cmd.Context(), key)
+	if err != nil {
+		return key + ": " + err.Error()
+	}
+	if a.Browse == nil {
+		return d.URL
+	}
+	if err := a.Browse(cmd.Context(), d.URL); err != nil {
+		return key + ": could not open the browser: " + err.Error()
+	}
+	return key + " opened in the browser."
+}
+
+// pickComment asks for a comment, confirms and adds it, and returns the
+// status to show.
+func (a *App) pickComment(cmd *cobra.Command, svc *core.Service, key string) string {
+	body, err := a.TTY.Prompt(fmt.Sprintf("\nComment on %s (Markdown, one line; empty to cancel): ", key))
+	if err != nil {
+		return key + ": " + err.Error()
+	}
+	if strings.TrimSpace(body) == "" {
+		return "No comment written; nothing was changed."
+	}
+	p, err := svc.PlanComment(cmd.Context(), key, body)
+	msg, err := a.confirmAndApply(cmd, svc, p, err)
+	if err != nil {
+		return key + ": " + err.Error()
+	}
+	return msg
 }

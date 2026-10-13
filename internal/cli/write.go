@@ -14,25 +14,36 @@ import (
 	"github.com/nyactl/tix-for-jira/internal/render"
 )
 
-// apply asks for confirmation on the terminal and applies the plan.
+// apply asks for confirmation on the terminal, applies the plan and prints
+// the result.
 func (a *App) apply(cmd *cobra.Command, svc *core.Service, plan *core.Plan, err error) error {
+	msg, err := a.confirmAndApply(cmd, svc, plan, err)
 	if err != nil {
 		return err
+	}
+	_, err = fmt.Fprintln(a.Out, msg)
+	return err
+}
+
+// confirmAndApply asks for confirmation on the terminal and applies the
+// plan, returning the sanitized result message.
+func (a *App) confirmAndApply(cmd *cobra.Command, svc *core.Service, plan *core.Plan, err error) (string, error) {
+	if err != nil {
+		return "", err
 	}
 	prof, err := a.profile(cmd)
 	if err != nil {
-		return err
+		return "", err
 	}
 	desc := target(svc.Site(), prof) + "\n\n" + render.Plan(plan)
 	if err := confirm(a.TTY, desc, plan.Key, plan.Kind == core.Destructive); err != nil {
-		return err
+		return "", err
 	}
 	msg, err := plan.Apply(cmd.Context())
 	if err != nil {
-		return err
+		return "", err
 	}
-	_, err = fmt.Fprintln(a.Out, sanitize.String(msg))
-	return err
+	return sanitize.String(msg), nil
 }
 
 // textArg reads --<name>; "-" reads stdin.
