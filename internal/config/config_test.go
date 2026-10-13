@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -27,7 +28,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := Config{Account: profile.Account{Site: "https://team.atlassian.net", Email: "me@example.com", TokenExpiry: "2027-01-31"}, Privacy: PrivacyOff}
-	if *got != want {
+	if !reflect.DeepEqual(*got, want) {
 		t.Errorf("loaded %+v", got)
 	}
 }
@@ -90,5 +91,36 @@ func TestProfilePaths(t *testing.T) {
 	p, err := Path("")
 	if err != nil || filepath.Base(p) != "test.json" || !strings.Contains(p, filepath.Join("tix-for-jira", "profiles")) {
 		t.Errorf("Path = %s, %v", p, err)
+	}
+}
+
+func TestSavedSearchesAndDefaultProject(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv("TIX_JIRA_CONFIG", path)
+	c := &Config{Account: profile.Account{Site: "team.atlassian.net", Email: "me@example.com"},
+		Searches: map[string]string{"urgent": "priority = Highest"}, DefaultProject: "PROJ"}
+	if err := c.Save(""); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if jql, err := got.SavedSearch("@urgent"); err != nil || jql != "priority = Highest" || got.DefaultProject != "PROJ" {
+		t.Errorf("loaded %+v: %q, %v", got, jql, err)
+	}
+	if _, err := got.SavedSearch("missing"); err == nil || !strings.Contains(err.Error(), "no saved search") {
+		t.Errorf("missing: %v", err)
+	}
+	for name, bad := range map[string]Config{
+		"name":    {Searches: map[string]string{"Bad Name": "x"}},
+		"empty":   {Searches: map[string]string{"ok": " "}},
+		"long":    {Searches: map[string]string{"ok": strings.Repeat("x", 2001)}},
+		"project": {DefaultProject: "proj-1"},
+	} {
+		bad.Account = c.Account
+		if err := bad.Validate(); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
 	}
 }

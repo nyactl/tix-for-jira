@@ -68,6 +68,8 @@ tix comments PROJ-123
 tix history PROJ-123 --since -7d
 tix history PROJ-123 --status-times   # how long it spent in each status
 tix search 'project = PROJ AND priority = High'
+tix config search add urgent 'priority = Highest'   # then: tix search @urgent
+tix config project PROJ          # default for tix create
 tix sprint show "PROJ board"       # your tickets in the active sprint; also tix boards, tix backlog <board>
 
 tix comment PROJ-123 --body "Fixed in **v2.1**, thanks @[Person A]"
@@ -110,7 +112,7 @@ No credentials go into the client configuration; tix-for-jira reads them from it
 
 | Read tools | Write tools (with `--allow-writes`) |
 |---|---|
-| `whoami`, `my_issues`, `search_issues`, `get_issue`, `list_comments`, `get_history`, `get_status_times`, `list_worklogs`, `list_transitions`, `list_editable_fields`, `get_attachment`, `list_link_types`, `list_projects`, `list_issue_types`, `list_boards`, `list_sprints`, `get_active_sprint`, `get_backlog` | `add_comment`, `update_fields`, `transition_issue`, `create_issue`, `log_work`, `link_issues`, `assign_to_me`, `attach_file`, `add_web_link`, `add_web_link`, `watch_issue`, `unwatch_issue`, `move_to_sprint` |
+| `whoami`, `my_issues`, `search_issues`, `list_saved_searches`, `get_issue`, `list_comments`, `get_history`, `get_status_times`, `list_worklogs`, `list_transitions`, `list_editable_fields`, `get_attachment`, `list_link_types`, `list_projects`, `list_issue_types`, `list_boards`, `list_sprints`, `get_active_sprint`, `get_backlog` | `add_comment`, `update_fields`, `transition_issue`, `create_issue`, `log_work`, `link_issues`, `assign_to_me`, `attach_file`, `add_web_link`, `add_web_link`, `watch_issue`, `unwatch_issue`, `move_to_sprint` |
 
 Every tool carries `readOnlyHint` / `destructiveHint` annotations.
 

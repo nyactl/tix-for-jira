@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -147,15 +148,21 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 					in.Fields[f.Field] = f.Value
 				}
 			}
-			svc, _, err := a.service(cmd)
+			svc, cfg, err := a.service(cmd)
 			if err != nil {
 				return err
+			}
+			if in.Project == "" {
+				in.Project = cfg.DefaultProject
+			}
+			if in.Project == "" {
+				return errors.New("name the project with --project, or set a default with `tix config project KEY`")
 			}
 			p, err := svc.PlanCreate(cmd.Context(), in)
 			return a.apply(cmd, svc, p, err)
 		},
 	}
-	create.Flags().String("project", "", "project key")
+	create.Flags().String("project", "", "project key (default: the profile's default project)")
 	create.Flags().String("type", "Task", "issue type")
 	create.Flags().String("summary", "", "one-line summary")
 	create.Flags().String("description", "", "description in Markdown, or - for stdin")
@@ -163,7 +170,6 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 	create.Flags().String("priority", "", "priority name")
 	create.Flags().String("parent", "", "parent ticket key (for subtasks)")
 	create.Flags().StringArray("set", nil, `other field "Name=value" (repeatable)`)
-	_ = create.MarkFlagRequired("project")
 	_ = create.MarkFlagRequired("summary")
 
 	logWork := &cobra.Command{

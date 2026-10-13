@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -38,16 +39,22 @@ func (a *App) addReadCommands(root *cobra.Command) {
 	mine.Flags().Int("max", 50, "maximum number of tickets")
 
 	search := &cobra.Command{
-		Use:   "search <jql>",
-		Short: "Search with JQL, limited to your privacy scope",
+		Use:   "search <jql|@name>",
+		Short: "Search with JQL or a saved search, limited to your privacy scope",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			svc, _, err := a.service(cmd)
+			svc, cfg, err := a.service(cmd)
 			if err != nil {
 				return err
 			}
+			jql := args[0]
+			if strings.HasPrefix(jql, "@") {
+				if jql, err = cfg.SavedSearch(jql); err != nil {
+					return err
+				}
+			}
 			max, _ := cmd.Flags().GetInt("max")
-			list, err := svc.Search(cmd.Context(), args[0], max)
+			list, err := svc.Search(cmd.Context(), jql, max)
 			if err != nil {
 				return err
 			}

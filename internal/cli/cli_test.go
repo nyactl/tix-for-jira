@@ -500,3 +500,55 @@ func TestOpen(t *testing.T) {
 		t.Errorf("opened %v", e.opened)
 	}
 }
+
+func TestSavedSearchesStayScoped(t *testing.T) {
+	e := newEnv(t).loggedIn(t)
+	if _, _, err := e.run(t, "config", "search", "add", "everything", "project = PROJ ORDER BY created"); err != nil {
+		t.Fatal(err)
+	}
+	out, _, err := e.run(t, "search", "@everything")
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := e.fake.JQL[len(e.fake.JQL)-1]
+	if last != "assignee = currentUser() AND (project = PROJ) ORDER BY created" {
+		t.Errorf("JQL = %q", last)
+	}
+	if !strings.Contains(out, "PROJ-1") || strings.Contains(out, "PROJ-2") {
+		t.Errorf("out = %q", out)
+	}
+	if _, _, err := e.run(t, "search", "@missing"); err == nil || !strings.Contains(err.Error(), "no saved search") {
+		t.Errorf("missing search: %v", err)
+	}
+	out, _, _ = e.run(t, "config", "search", "list")
+	if !strings.Contains(out, "@everything: project = PROJ ORDER BY created") {
+		t.Errorf("list = %q", out)
+	}
+	if _, _, err := e.run(t, "config", "search", "remove", "everything"); err != nil {
+		t.Fatal(err)
+	}
+	if cfg, _ := config.Load(""); len(cfg.Searches) != 0 {
+		t.Errorf("searches = %v", cfg.Searches)
+	}
+}
+
+func TestCreateUsesDefaultProject(t *testing.T) {
+	e := newEnv(t).loggedIn(t)
+	e.tty.answers = []string{"y"}
+	if _, _, err := e.run(t, "create", "--summary", "No project"); err == nil || !strings.Contains(err.Error(), "tix config project") {
+		t.Fatalf("without default: %v", err)
+	}
+	if _, _, err := e.run(t, "config", "project", "proj"); err != nil {
+		t.Fatal(err)
+	}
+	out, _, err := e.run(t, "create", "--summary", "Uses the default")
+	if err != nil || !strings.Contains(out, "Created PROJ-") {
+		t.Fatalf("create: %q, %v", out, err)
+	}
+	if !strings.Contains(e.tty.asked[len(e.tty.asked)-1], "Create a Task in PROJ:") {
+		t.Errorf("asked %q", e.tty.asked[len(e.tty.asked)-1])
+	}
+	if out, _, _ := e.run(t, "config", "project", "--clear"); !strings.Contains(out, "No default project") {
+		t.Errorf("clear: %q", out)
+	}
+}

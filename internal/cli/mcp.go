@@ -25,7 +25,8 @@ func (a *App) mcpCmd() *cobra.Command {
 			writes, _ := cmd.Flags().GetBool("allow-writes")
 			dir, _ := cmd.Flags().GetString("download-dir")
 			_, _ = fmt.Fprintf(a.Err, "tix-for-jira %s: serving %s (profile %s, privacy %s, writes %v)\n", a.Version, cfg.Site, prof, cfg.Privacy, writes)
-			return mcpserver.Run(cmd.Context(), svc, mcpserver.Options{Version: a.Version, AllowWrites: writes, DownloadDir: dir, Target: target(cfg.Site, prof)})
+			return mcpserver.Run(cmd.Context(), svc, mcpserver.Options{Version: a.Version, AllowWrites: writes, DownloadDir: dir, Target: target(cfg.Site, prof),
+				Searches: cfg.Searches, DefaultProject: cfg.DefaultProject})
 		},
 	}
 	cmd.Flags().Bool("allow-writes", false, "offer write tools (each write still needs your approval)")

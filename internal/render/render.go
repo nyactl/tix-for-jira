@@ -5,6 +5,7 @@ package render
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/nyactl/approvekit/sanitize"
@@ -385,6 +386,23 @@ func StatusTimes(v *core.StatusTimesView) string {
 			current = ", current status"
 		}
 		line(&b, "- %s: %s (entered %s%s)", st.Status, st.Duration, visits, current)
+	}
+	return done(&b)
+}
+
+// SavedSearches lists saved searches by name.
+func SavedSearches(searches map[string]string) string {
+	if len(searches) == 0 {
+		return "No saved searches; add one with `tix config search add NAME JQL`.\n"
+	}
+	names := make([]string, 0, len(searches))
+	for n := range searches {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	var b strings.Builder
+	for _, n := range names {
+		line(&b, "- @%s: %s", n, searches[n])
 	}
 	return done(&b)
 }

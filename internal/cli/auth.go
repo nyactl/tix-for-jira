@@ -15,6 +15,7 @@ import (
 	"github.com/nyactl/approvekit/profile"
 	"github.com/nyactl/tix-for-jira/internal/config"
 	"github.com/nyactl/tix-for-jira/internal/jira"
+	"github.com/nyactl/tix-for-jira/internal/render"
 )
 
 func (a *App) authCmd() *cobra.Command {
@@ -83,6 +84,9 @@ func (a *App) authCmd() *cobra.Command {
 			if prev != nil {
 				cfg.Privacy = prev.Privacy
 				cfg.AllowDevBuilds = prev.AllowDevBuilds && prev.Site == cfg.Site
+				if prev.Site == cfg.Site {
+					cfg.Searches, cfg.DefaultProject = prev.Searches, prev.DefaultProject
+				}
 			}
 			if err := cfg.Validate(); err != nil {
 				return err
@@ -197,7 +201,8 @@ func (a *App) configCmd() *cobra.Command {
 				if cfg.ScopedToken {
 					token = "scoped (via the Atlassian API gateway, cloud ID " + cfg.CloudID + ")"
 				}
-				return fmt.Sprintf("- Profile: %s\n- Site: %s\n- Email: %s\n- Token: %s\n- Privacy: %s\n- Token expiry: %s\n- Development builds: %v\n- File: %s\n", prof, cfg.Site, cfg.Email, token, cfg.Privacy, orDash(cfg.TokenExpiry), cfg.AllowDevBuilds, path)
+				return fmt.Sprintf("- Profile: %s\n- Site: %s\n- Email: %s\n- Token: %s\n- Privacy: %s\n- Default project: %s\n- Saved searches: %d\n- Token expiry: %s\n- Development builds: %v\n- File: %s\n",
+					prof, cfg.Site, cfg.Email, token, cfg.Privacy, orDash(cfg.DefaultProject), len(cfg.Searches), orDash(cfg.TokenExpiry), cfg.AllowDevBuilds, path)
 			})
 		},
 	}
@@ -321,7 +326,119 @@ func (a *App) configCmd() *cobra.Command {
 			return err
 		},
 	}
-	cmd.AddCommand(show, privacy, profiles, devBuilds)
+	cmd.AddCommand(show, privacy, profiles, devBuilds, a.searchConfigCmd(), a.projectConfigCmd())
+	return cmd
+}
+
+// saveConfig loads the selected profile, changes it and saves it.
+func (a *App) saveConfig(cmd *cobra.Command, change func(*config.Config) (string, error)) error {
+	prof, err := a.profile(cmd)
+	if err != nil {
+		return err
+	}
+	cfg, err := config.Load(prof)
+	if err != nil {
+		return err
+	}
+	msg, err := change(cfg)
+	if err != nil {
+		return err
+	}
+	if err := cfg.Save(prof); err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(a.Out, msg)
+	return err
+}
+
+func (a *App) searchConfigCmd() *cobra.Command {
+	cmd := &cobra.Command{Use: "search", Short: "Save JQL searches by name, to run with `tix search @name`"}
+	add := &cobra.Command{
+		Use:   "add <name> <jql>",
+		Short: "Save or replace a search",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return a.saveConfig(cmd, func(cfg *config.Config) (string, error) {
+				name, err := config.SearchName(args[0])
+				if err != nil {
+					return "", err
+				}
+				if cfg.Searches == nil {
+					cfg.Searches = map[string]string{}
+				}
+				cfg.Searches[name] = strings.TrimSpace(args[1])
+				return fmt.Sprintf("Saved search @%s. It runs limited to your privacy scope.", name), nil
+			})
+		},
+	}
+	remove := &cobra.Command{
+		Use:   "remove <name>",
+		Short: "Delete a saved search",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return a.saveConfig(cmd, func(cfg *config.Config) (string, error) {
+				name, err := config.SearchName(args[0])
+				if err != nil {
+					return "", err
+				}
+				if _, ok := cfg.Searches[name]; !ok {
+					return "", fmt.Errorf("no saved search %q", name)
+				}
+				delete(cfg.Searches, name)
+				return fmt.Sprintf("Deleted search @%s.", name), nil
+			})
+		},
+	}
+	list := &cobra.Command{
+		Use:   "list",
+		Short: "List the saved searches",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			prof, err := a.profile(cmd)
+			if err != nil {
+				return err
+			}
+			cfg, err := config.Load(prof)
+			if err != nil {
+				return err
+			}
+			return a.print(cmd, cfg.Searches, func() string { return render.SavedSearches(cfg.Searches) })
+		},
+	}
+	cmd.AddCommand(add, remove, list)
+	return cmd
+}
+
+func (a *App) projectConfigCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "project [KEY]",
+		Short: "Set the default project for `tix create`, or show it",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			clear, _ := cmd.Flags().GetBool("clear")
+			if len(args) == 0 && !clear {
+				prof, err := a.profile(cmd)
+				if err != nil {
+					return err
+				}
+				cfg, err := config.Load(prof)
+				if err != nil {
+					return err
+				}
+				_, err = fmt.Fprintf(a.Out, "Default project: %s\n", orDash(cfg.DefaultProject))
+				return err
+			}
+			return a.saveConfig(cmd, func(cfg *config.Config) (string, error) {
+				if clear {
+					cfg.DefaultProject = ""
+					return "No default project.", nil
+				}
+				cfg.DefaultProject = strings.ToUpper(strings.TrimSpace(args[0]))
+				return "Default project: " + cfg.DefaultProject + ".", nil
+			})
+		},
+	}
+	cmd.Flags().Bool("clear", false, "remove the default project")
 	return cmd
 }
 
