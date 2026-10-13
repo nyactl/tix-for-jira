@@ -12,6 +12,7 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 - Saved searches per profile (`tix config search add NAME JQL`, `tix search @NAME`, MCP `search_issues` with `@NAME` and `list_saved_searches`), limited to the privacy scope like every search. A default project (`tix config project KEY`) for `tix create` and MCP `create_issue` without a project.
 - MCP prompts `morning-overview`, `ticket-summary` and `sprint-status`, which use only the read tools.
 - MCP read tools return structured content with output schemas alongside the Markdown, redacted and sanitized the same way.
+- Linux support: the token is stored through the Secret Service (GNOME Keyring, KWallet), `tix open` uses `xdg-open`, and releases include Linux binaries for amd64 and arm64, also via Homebrew on Linux.
 
 ## [0.2.0] - 2026-10-13
 

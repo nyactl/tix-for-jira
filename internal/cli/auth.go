@@ -24,7 +24,7 @@ func (a *App) authCmd() *cobra.Command {
 	login := &cobra.Command{
 		Use:   "login",
 		Short: "Store your Jira site, email and API token",
-		Long: "Asks for your API token in the terminal (input hidden), verifies it and stores it in the macOS Keychain.\n" +
+		Long: "Asks for your API token in the terminal (input hidden), verifies it and stores it in the macOS Keychain or, on Linux, the Secret Service (GNOME Keyring, KWallet).\n" +
 			"Create a token at https://id.atlassian.com/manage-profile/security/api-tokens. It has the same permissions as your account.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -149,7 +149,7 @@ func (a *App) authCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := confirm(a.TTY, fmt.Sprintf("Remove the API token for %s on %s (profile %s) from the Keychain?", cfg.Email, cfg.Site, prof), "", false); err != nil {
+			if err := confirm(a.TTY, fmt.Sprintf("Remove the API token for %s on %s (profile %s) from the system keychain?", cfg.Email, cfg.Site, prof), "", false); err != nil {
 				return err
 			}
 			if err := a.Secrets.Delete(keychain.AccountKey(cfg.Site, cfg.Email)); err != nil {

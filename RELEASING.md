@@ -28,7 +28,7 @@ Release tags (`v*`) are protected against deletion, moving and force-pushes.
 GitHub Actions then:
 
 1. runs the tests on macOS; the release is blocked if they fail
-2. builds `tix` for Apple Silicon and Intel on a macOS runner (the Keychain code needs cgo)
+2. builds `tix` for Apple Silicon and Intel on a macOS runner (the Keychain code needs cgo), and for Linux amd64 and arm64 without cgo
 3. publishes the GitHub release with the archives, `checksums.txt` and its cosign signature, using the notes from `CHANGELOG.md`
 4. updates the Homebrew formula `tix-for-jira` in [nyactl/homebrew-tap](https://github.com/nyactl/homebrew-tap)
 

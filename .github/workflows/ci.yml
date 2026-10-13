@@ -27,6 +27,9 @@ jobs:
       - run: go vet ./...
       - run: go vet -tags integration ./integration/
       - run: go test -race -shuffle=on ./...
+      - name: Linux release build without cgo
+        if: runner.os == 'Linux'
+        run: CGO_ENABLED=0 go build -o /dev/null ./cmd/tix
 
   lint:
     runs-on: ubuntu-latest

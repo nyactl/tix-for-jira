@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"time"
 
@@ -46,10 +47,14 @@ func Default(version string) *App {
 	return &App{Version: resolveVersion(version), In: os.Stdin, Out: os.Stdout, Err: os.Stderr, TTY: devTTY{}, Secrets: keychain.New("tix-for-jira"), Now: time.Now, Browse: browse}
 }
 
-// browse hands the URL to macOS's open command as a single argument, with
-// no shell in between.
+// browse hands the URL to the desktop's opener (open on macOS, xdg-open
+// elsewhere) as a single argument, with no shell in between.
 func browse(ctx context.Context, url string) error {
-	return exec.CommandContext(ctx, "open", url).Run() //nolint:gosec // G204: the URL is the configured site plus a validated key
+	opener := "xdg-open"
+	if runtime.GOOS == "darwin" {
+		opener = "open"
+	}
+	return exec.CommandContext(ctx, opener, url).Run() //nolint:gosec // G204: the URL is the configured site plus a validated key
 }
 
 func resolveVersion(v string) string {
