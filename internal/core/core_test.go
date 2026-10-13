@@ -921,3 +921,63 @@ func TestWebLinks(t *testing.T) {
 		}
 	}
 }
+
+func TestStatusTimes(t *testing.T) {
+	t.Parallel()
+	f := fixture(t)
+	f.AddIssue(jiratest.Issue{Key: "PROJ-7", Summary: "Flow", Assignee: "acc-me", Status: "In Progress", Created: "2026-10-01T09:00:00.000+0000",
+		Changes: []jiratest.Change{
+			{Author: "acc-alice", Created: "2026-10-02T09:00:00.000+0000", Field: "status", FieldType: "jira", FromS: "To Do", ToS: "In Progress"},
+			{Author: "acc-me", Created: "2026-10-03T09:00:00.000+0000", Field: "labels", FieldType: "jira", ToS: "x"},
+			{Author: "acc-me", Created: "2026-10-04T09:00:00.000+0000", Field: "status", FieldType: "jira", FromS: "In Progress", ToS: "In Review"},
+			{Author: "acc-bob", Created: "2026-10-05T03:00:00.000+0000", Field: "status", FieldType: "jira", FromS: "In Review", ToS: "In Progress"},
+		}})
+	f.AddIssue(jiratest.Issue{Key: "PROJ-8", Summary: "New", Assignee: "acc-me", Created: "2026-10-06T08:30:00.000+0000"})
+	s := service(t, f, config.PrivacyOwn)
+	s.now = func() time.Time { return time.Date(2026, 10, 6, 9, 0, 0, 0, time.UTC) }
+	ctx := context.Background()
+
+	v, err := s.StatusTimes(ctx, "PROJ-7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertNoPersonalData(t, v)
+	got := map[string]StatusTime{}
+	for _, st := range v.Statuses {
+		got[st.Status] = st
+	}
+	if len(v.Statuses) != 3 || v.Statuses[0].Status != "To Do" || v.Changes != 3 {
+		t.Fatalf("view = %+v", v)
+	}
+	for status, want := range map[string]struct {
+		dur     string
+		visits  int
+		current bool
+	}{
+		"To Do":       {"1d", 1, false},
+		"In Progress": {"3d 6h", 2, true},
+		"In Review":   {"18h", 1, false},
+	} {
+		st := got[status]
+		if st.Duration != want.dur || st.Visits != want.visits || st.Current != want.current {
+			t.Errorf("%s = %+v, want %+v", status, st, want)
+		}
+	}
+
+	v, err = s.StatusTimes(ctx, "PROJ-8")
+	if err != nil || len(v.Statuses) != 1 || v.Statuses[0].Duration != "30m" || !v.Statuses[0].Current {
+		t.Errorf("without changes = %+v, %v", v, err)
+	}
+	if _, err := s.StatusTimes(ctx, "PROJ-2"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("out of scope: %v", err)
+	}
+}
+
+func TestFormatDuration(t *testing.T) {
+	t.Parallel()
+	for secs, want := range map[int64]string{30: "under 1m", 60: "1m", 3600: "1h", 5400: "1h 30m", 86400: "1d", 90000: "1d 1h", 172800 + 59: "2d"} {
+		if got := formatDuration(secs); got != want {
+			t.Errorf("%d: %q, want %q", secs, got, want)
+		}
+	}
+}

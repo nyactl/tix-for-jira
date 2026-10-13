@@ -171,3 +171,19 @@ type WebLink struct {
 	Title string `json:"title"`
 	URL   string `json:"url"`
 }
+
+// StatusTime is the total time a ticket spent in one status.
+type StatusTime struct {
+	Status   string `json:"status"`
+	Seconds  int64  `json:"seconds"`
+	Duration string `json:"duration"`
+	Visits   int    `json:"visits"`
+	Current  bool   `json:"current,omitempty"`
+}
+
+type StatusTimesView struct {
+	Key      string       `json:"key"`
+	Created  string       `json:"created"`
+	Changes  int          `json:"statusChanges"`
+	Statuses []StatusTime `json:"statuses"`
+}

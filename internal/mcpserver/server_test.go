@@ -109,7 +109,7 @@ func TestReadOnlyByDefault(t *testing.T) {
 			t.Errorf("%s is not marked read-only", name)
 		}
 	}
-	if len(tools) != 17 {
+	if len(tools) != 18 {
 		t.Errorf("got %d read tools", len(tools))
 	}
 	if instr := h.session.InitializeResult().Instructions; !strings.Contains(instr, "read-only") || !strings.Contains(instr, "Person A") {
