@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 
 	"github.com/nyactl/tix-for-jira/internal/core"
@@ -198,7 +200,20 @@ func (a *App) addReadCommands(root *cobra.Command) {
 	})
 	backlog.Flags().Int("max", 50, "maximum number of tickets")
 
-	root.AddCommand(mine, search, show, comments, history, worklogs, transitions, fields, attachment, linkTypes, projects, types, whoami, boards, sprint, backlog)
+	open := keyCmd(a, "open <key>", "Open a ticket in the browser", func(cmd *cobra.Command, svc *core.Service, key string) error {
+		d, err := svc.Issue(cmd.Context(), key)
+		if err != nil {
+			return err
+		}
+		if onlyPrint, _ := cmd.Flags().GetBool("print"); onlyPrint || a.Browse == nil {
+			_, err := fmt.Fprintln(a.Out, d.URL)
+			return err
+		}
+		return a.Browse(cmd.Context(), d.URL)
+	})
+	open.Flags().Bool("print", false, "print the URL instead of opening it")
+
+	root.AddCommand(mine, search, show, open, comments, history, worklogs, transitions, fields, attachment, linkTypes, projects, types, whoami, boards, sprint, backlog)
 }
 
 func keyCmd(a *App, use, short string, run func(*cobra.Command, *core.Service, string) error) *cobra.Command {

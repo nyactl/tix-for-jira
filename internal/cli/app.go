@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime/debug"
 	"time"
@@ -36,11 +37,19 @@ type App struct {
 	Transport http.RoundTripper
 	// Gateway overrides Atlassian's API gateway in tests.
 	Gateway string
+	// Browse opens a URL in the default browser.
+	Browse func(ctx context.Context, url string) error
 }
 
 // Default returns the production dependencies.
 func Default(version string) *App {
-	return &App{Version: resolveVersion(version), In: os.Stdin, Out: os.Stdout, Err: os.Stderr, TTY: devTTY{}, Secrets: keychain.New("tix-for-jira"), Now: time.Now}
+	return &App{Version: resolveVersion(version), In: os.Stdin, Out: os.Stdout, Err: os.Stderr, TTY: devTTY{}, Secrets: keychain.New("tix-for-jira"), Now: time.Now, Browse: browse}
+}
+
+// browse hands the URL to macOS's open command as a single argument, with
+// no shell in between.
+func browse(ctx context.Context, url string) error {
+	return exec.CommandContext(ctx, "open", url).Run() //nolint:gosec // G204: the URL is the configured site plus a validated key
 }
 
 func resolveVersion(v string) string {
