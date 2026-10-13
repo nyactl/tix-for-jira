@@ -228,7 +228,7 @@ func (a *App) addReadCommands(root *cobra.Command) {
 	})
 	open.Flags().Bool("print", false, "print the URL instead of opening it")
 
-	root.AddCommand(mine, search, show, open, comments, history, worklogs, transitions, fields, attachment, linkTypes, projects, types, whoami, boards, sprint, backlog)
+	root.AddCommand(mine, a.pickCmd(), search, show, open, comments, history, worklogs, transitions, fields, attachment, linkTypes, projects, types, whoami, boards, sprint, backlog)
 }
 
 func keyCmd(a *App, use, short string, run func(*cobra.Command, *core.Service, string) error) *cobra.Command {

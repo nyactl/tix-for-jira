@@ -1,9 +1,11 @@
 package cli
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -22,6 +24,35 @@ type script struct {
 	secrets []string
 	asked   []string
 	noTTY   bool
+	// picks are what Pick returns, in order, then quit; picked records the
+	// lines, statuses records the status shown, viewed the texts viewed.
+	picks    []pickChoice
+	picked   []string
+	statuses []string
+	viewed   []string
+}
+
+type pickChoice struct {
+	index  int
+	action PickAction
+}
+
+func (s *script) Pick(_ string, lines []string, _ int, status string) (int, PickAction, error) {
+	if s.noTTY {
+		return 0, PickQuit, errNoTerminal
+	}
+	s.picked, s.statuses = lines, append(s.statuses, status)
+	if len(s.picks) == 0 {
+		return 0, PickQuit, nil
+	}
+	c := s.picks[0]
+	s.picks = s.picks[1:]
+	return c.index, c.action, nil
+}
+
+func (s *script) View(_, text string) error {
+	s.viewed = append(s.viewed, text)
+	return nil
 }
 
 func (s *script) Prompt(q string) (string, error) {
@@ -550,5 +581,120 @@ func TestCreateUsesDefaultProject(t *testing.T) {
 	}
 	if out, _, _ := e.run(t, "config", "project", "--clear"); !strings.Contains(out, "No default project") {
 		t.Errorf("clear: %q", out)
+	}
+}
+
+func TestPickModel(t *testing.T) {
+	t.Parallel()
+	m := &pickModel{n: 3}
+	for _, k := range []string{"up", "down", "down", "down", "k", "j", "j"} {
+		if _, done := m.key(k); done {
+			t.Fatalf("%s ended the choice", k)
+		}
+	}
+	if m.cur != 2 {
+		t.Errorf("cursor = %d, want 2 (stays in range)", m.cur)
+	}
+	for k, want := range map[string]PickAction{"enter": PickShow, "o": PickOpen, "c": PickComment, "q": PickQuit, "ctrl-c": PickQuit, "esc": PickQuit} {
+		if a, done := m.key(k); !done || a != want {
+			t.Errorf("%s = %v, %v", k, a, done)
+		}
+	}
+	m.key("home")
+	if m.cur != 0 {
+		t.Errorf("home: %d", m.cur)
+	}
+}
+
+func TestReadKey(t *testing.T) {
+	t.Parallel()
+	r := bufio.NewReader(strings.NewReader("\x1b[A\x1b[Bj\r\x03\x1bOH" + "o\x1b[D\x1b[5~\x1b[6~"))
+	var got []string
+	for {
+		k, err := readKey(r)
+		if err != nil {
+			break
+		}
+		got = append(got, k)
+	}
+	if strings.Join(got, ",") != "up,down,j,enter,ctrl-c,home,o,left,pgup,pgdn" {
+		t.Errorf("keys = %v", got)
+	}
+}
+
+func TestRenderPick(t *testing.T) {
+	t.Parallel()
+	lines := make([]string, 30)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("PROJ-%d line", i)
+	}
+	lines[25] = "PROJ-25 evil\x1b]0;title\x07 summary that is far too long for the terminal width"
+	out := renderPick("Tickets", lines, 25, 40, 12, "PROJ-25 opened in the browser.")
+	if !strings.Contains(out, "\x1b[7m> PROJ-25 evil") || strings.Contains(out, "PROJ-0 ") || strings.Contains(out, "\x07") || strings.Contains(out, "\x1b]0;") {
+		t.Errorf("render:\n%q", out)
+	}
+	if !strings.Contains(out, "…") || !strings.HasSuffix(out, "PROJ-25 opened in the browser.\r\n") {
+		t.Error("long line not clipped, or no status line")
+	}
+}
+
+func TestPickCommandStaysUntilQuit(t *testing.T) {
+	e := newEnv(t).loggedIn(t)
+	e.tty.picks = []pickChoice{{0, PickShow}, {0, PickOpen}, {0, PickComment}, {0, PickComment}}
+	e.tty.answers = []string{"Not this one", "n", "Done from the picker", "y"}
+	out, _, err := e.run(t, "pick")
+	if err != nil || out != "" {
+		t.Fatalf("pick: %q, %v", out, err)
+	}
+	if len(e.tty.picked) != 1 || !strings.Contains(e.tty.picked[0], "PROJ-1") {
+		t.Errorf("offered %v", e.tty.picked)
+	}
+	if len(e.tty.viewed) != 1 || !strings.Contains(e.tty.viewed[0], "# PROJ-1: Mine") {
+		t.Errorf("viewed %q", e.tty.viewed)
+	}
+	if len(e.opened) != 1 {
+		t.Errorf("opened %v", e.opened)
+	}
+	want := []string{"", "", "PROJ-1 opened in the browser.", "not confirmed", "Added comment"}
+	if len(e.tty.statuses) != len(want) {
+		t.Fatalf("statuses %q", e.tty.statuses)
+	}
+	for i, w := range want {
+		if !strings.Contains(e.tty.statuses[i], w) {
+			t.Errorf("status %d = %q, want %q", i, e.tty.statuses[i], w)
+		}
+	}
+	if n := len(e.fake.Issues["PROJ-1"].Comments); n != 1 {
+		t.Errorf("%d comments, want only the confirmed one", n)
+	}
+	e.tty.noTTY = true
+	if _, _, err := e.run(t, "pick"); !errors.Is(err, errNoTerminal) {
+		t.Errorf("without a terminal: %v", err)
+	}
+}
+
+func TestViewModel(t *testing.T) {
+	t.Parallel()
+	v := &viewModel{n: 50, rows: 10}
+	for _, k := range []string{"up", "down", "down", " ", "pgdn", "end", "down"} {
+		if v.key(k) {
+			t.Fatalf("%s went back", k)
+		}
+	}
+	if v.top != 40 {
+		t.Errorf("top = %d, want 40 (last page)", v.top)
+	}
+	v.key("pgup")
+	v.key("home")
+	if v.top != 0 {
+		t.Errorf("home: %d", v.top)
+	}
+	for _, k := range []string{"enter", "q", "esc", "left"} {
+		if !v.key(k) {
+			t.Errorf("%s did not go back", k)
+		}
+	}
+	if got := wrap("abcdef\nxy", 4); strings.Join(got, "|") != "abcd|ef|xy" {
+		t.Errorf("wrap = %q", got)
 	}
 }
