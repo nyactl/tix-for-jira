@@ -2,6 +2,7 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/nyactl/approvekit/atlassian"
 	"github.com/nyactl/tix-for-jira/internal/config"
@@ -329,6 +331,67 @@ func TestPrompts(t *testing.T) {
 	} {
 		if _, err := h.session.GetPrompt(ctx, &mcp.GetPromptParams{Name: name, Arguments: args}); err == nil {
 			t.Errorf("%s accepted %v", name, args)
+		}
+	}
+}
+
+// TestStructuredContentMatchesSchemas calls every read tool and validates
+// its structured content against the tool's output schema.
+func TestStructuredContentMatchesSchemas(t *testing.T) {
+	t.Parallel()
+	h := connectWith(t, false, config.PrivacyOwn, "", "", Options{Searches: map[string]string{"all": "project = PROJ"}})
+	h.fake.AddIssue(jiratest.Issue{Key: "PROJ-9", Summary: "Bell\x07 and clear\x1b[2J by Alice Smith", Assignee: "acc-me", Reporter: "acc-alice"})
+	h.fake.Boards = []jiratest.Board{{ID: 1, Name: "PROJ board", Type: "scrum", Project: "PROJ"}}
+	h.fake.Sprints = []jiratest.Sprint{{ID: 11, Board: 1, Name: "Sprint 1", State: "active"}}
+	h.fake.Issues["PROJ-1"].Sprint = 11
+	ctx := context.Background()
+	tools := toolMap(t, h)
+	calls := map[string]map[string]any{
+		"whoami": {}, "my_issues": {}, "search_issues": {"jql": "@all"}, "list_saved_searches": {},
+		"get_issue": {"key": "PROJ-9"}, "list_comments": {"key": "PROJ-1"}, "get_history": {"key": "PROJ-1"},
+		"get_status_times": {"key": "PROJ-1"}, "list_worklogs": {"key": "PROJ-1"}, "list_transitions": {"key": "PROJ-1"},
+		"list_editable_fields": {"key": "PROJ-1"}, "list_link_types": {}, "list_projects": {}, "list_issue_types": {"project": "PROJ"},
+		"list_boards": {}, "list_sprints": {"board": "1"}, "get_active_sprint": {"board": "1"}, "get_backlog": {"board": "1"},
+	}
+	for name, tool := range tools {
+		if tool.OutputSchema == nil {
+			if name != "get_attachment" {
+				t.Errorf("%s has no output schema", name)
+			}
+			continue
+		}
+		args, ok := calls[name]
+		if !ok {
+			t.Errorf("no test call for %s", name)
+			continue
+		}
+		raw, _ := json.Marshal(tool.OutputSchema)
+		var schema jsonschema.Schema
+		if err := json.Unmarshal(raw, &schema); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		resolved, err := schema.Resolve(nil)
+		if err != nil {
+			t.Fatalf("%s: resolving the schema: %v", name, err)
+		}
+		res, err := h.session.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: args})
+		if err != nil || res.IsError {
+			t.Errorf("%s: %v %+v", name, err, res)
+			continue
+		}
+		if res.StructuredContent == nil {
+			t.Errorf("%s: no structured content", name)
+			continue
+		}
+		// Validate what a client receives: the JSON form.
+		var instance any
+		b, _ := json.Marshal(res.StructuredContent)
+		_ = json.Unmarshal(b, &instance)
+		if err := resolved.Validate(instance); err != nil {
+			t.Errorf("%s: structured content does not match the schema: %v\n%s", name, err, b)
+		}
+		if strings.Contains(string(b), "Alice") || strings.Contains(string(b), "acc-alice") || strings.ContainsAny(string(b), "\x07\x1b") || strings.Contains(string(b), `\u001b`) || strings.Contains(string(b), `\u0007`) {
+			t.Errorf("%s: structured content is not redacted or sanitized: %s", name, b)
 		}
 	}
 }

@@ -116,6 +116,8 @@ No credentials go into the client configuration; tix-for-jira reads them from it
 
 Prompts, offered by MCP clients as ready-made requests: `morning-overview` (what changed on my tickets since yesterday), `ticket-summary` (goal, state, open questions and next steps of one ticket) and `sprint-status` (my part of the active sprint). They only use the read tools above.
 
+Read tools return their result twice: as Markdown for the model, and as structured content with an output schema for clients that process results. Both hold the same redacted and sanitized view.
+
 Every tool carries `readOnlyHint` / `destructiveHint` annotations.
 
 ## Profiles: test and production

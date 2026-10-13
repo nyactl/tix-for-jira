@@ -88,7 +88,7 @@ func text(s string) (*mcp.CallToolResult, any, error) {
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: s}}}, nil, nil
 }
 
-func add[In any](srv *mcp.Server, name, desc string, ann *mcp.ToolAnnotations, h mcp.ToolHandlerFor[In, any]) {
+func add[In, Out any](srv *mcp.Server, name, desc string, ann *mcp.ToolAnnotations, h mcp.ToolHandlerFor[In, Out]) {
 	mcp.AddTool(srv, &mcp.Tool{Name: name, Description: desc, Annotations: ann}, h)
 }
 
@@ -158,23 +158,23 @@ type emptyInput struct{}
 
 func (s *server) registerReads(srv *mcp.Server) {
 	add(srv, "whoami", "Show the authenticated user, Jira site and privacy mode.", readOnly(),
-		func(ctx context.Context, _ *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, any, error) {
+		func(ctx context.Context, _ *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, *core.Me, error) {
 			me, err := s.svc.Whoami(ctx)
 			if err != nil {
 				return nil, nil, err
 			}
-			return text(render.Me(me))
+			return structured(render.Me(me), me)
 		})
 	add(srv, "my_issues", "List tickets assigned to the user, most recently updated first. Open tickets only unless include_done is set.", readOnly(),
-		func(ctx context.Context, _ *mcp.CallToolRequest, in myIssuesInput) (*mcp.CallToolResult, any, error) {
+		func(ctx context.Context, _ *mcp.CallToolRequest, in myIssuesInput) (*mcp.CallToolResult, *issuesOut, error) {
 			list, err := s.svc.MyIssues(ctx, core.MyIssuesOptions{IncludeDone: in.IncludeDone, Since: in.Since, Project: in.Project, Text: in.Text, Max: in.Max})
 			if err != nil {
 				return nil, nil, err
 			}
-			return text(render.IssueList(list))
+			return structured(render.IssueList(list), &issuesOut{Issues: list})
 		})
 	add(srv, "search_issues", "Search tickets with JQL, or with a saved search written as @name (see list_saved_searches), limited to the privacy scope.", readOnly(),
-		func(ctx context.Context, _ *mcp.CallToolRequest, in searchInput) (*mcp.CallToolResult, any, error) {
+		func(ctx context.Context, _ *mcp.CallToolRequest, in searchInput) (*mcp.CallToolResult, *issuesOut, error) {
 			jql := in.JQL
 			if strings.HasPrefix(strings.TrimSpace(jql), "@") {
 				name := strings.TrimPrefix(strings.TrimSpace(jql), "@")
@@ -188,123 +188,123 @@ func (s *server) registerReads(srv *mcp.Server) {
 			if err != nil {
 				return nil, nil, err
 			}
-			return text(render.IssueList(list))
+			return structured(render.IssueList(list), &issuesOut{Issues: list})
 		})
 	add(srv, "list_saved_searches", "List the user's saved searches, usable in search_issues as @name.", readOnly(),
-		func(ctx context.Context, _ *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, any, error) {
-			return text(render.SavedSearches(s.opts.Searches))
+		func(ctx context.Context, _ *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, *searchesOut, error) {
+			return structured(render.SavedSearches(s.opts.Searches), &searchesOut{Searches: s.opts.Searches})
 		})
 	add(srv, "get_issue", "Show a ticket: fields, description, related tickets, attachments and custom fields.", readOnly(),
-		func(ctx context.Context, _ *mcp.CallToolRequest, in keyInput) (*mcp.CallToolResult, any, error) {
+		func(ctx context.Context, _ *mcp.CallToolRequest, in keyInput) (*mcp.CallToolResult, *core.IssueDetail, error) {
 			d, err := s.svc.Issue(ctx, in.Key)
 			if err != nil {
 				return nil, nil, err
 			}
-			return text(render.Issue(d))
+			return structured(render.Issue(d), d)
 		})
 	add(srv, "list_comments", "List a ticket's comments, oldest first.", readOnly(),
-		func(ctx context.Context, _ *mcp.CallToolRequest, in keyMaxInput) (*mcp.CallToolResult, any, error) {
+		func(ctx context.Context, _ *mcp.CallToolRequest, in keyMaxInput) (*mcp.CallToolResult, *commentsOut, error) {
 			cs, err := s.svc.Comments(ctx, in.Key, in.Max)
 			if err != nil {
 				return nil, nil, err
 			}
-			return text(render.Comments(cs))
+			return structured(render.Comments(cs), &commentsOut{Comments: cs})
 		})
 	add(srv, "get_history", "Show a ticket's change history, oldest first.", readOnly(),
-		func(ctx context.Context, _ *mcp.CallToolRequest, in historyInput) (*mcp.CallToolResult, any, error) {
+		func(ctx context.Context, _ *mcp.CallToolRequest, in historyInput) (*mcp.CallToolResult, *historyOut, error) {
 			hs, err := s.svc.History(ctx, in.Key, in.Since, in.Max)
 			if err != nil {
 				return nil, nil, err
 			}
-			return text(render.History(hs))
+			return structured(render.History(hs), &historyOut{Changes: hs})
 		})
 	add(srv, "get_status_times", "Show how long a ticket spent in each status, from its change history, and how often it entered each.", readOnly(),
-		func(ctx context.Context, _ *mcp.CallToolRequest, in keyInput) (*mcp.CallToolResult, any, error) {
+		func(ctx context.Context, _ *mcp.CallToolRequest, in keyInput) (*mcp.CallToolResult, *core.StatusTimesView, error) {
 			v, err := s.svc.StatusTimes(ctx, in.Key)
 			if err != nil {
 				return nil, nil, err
 			}
-			return text(render.StatusTimes(v))
+			return structured(render.StatusTimes(v), v)
 		})
 	add(srv, "list_worklogs", "List work logged on a ticket.", readOnly(),
-		func(ctx context.Context, _ *mcp.CallToolRequest, in keyMaxInput) (*mcp.CallToolResult, any, error) {
+		func(ctx context.Context, _ *mcp.CallToolRequest, in keyMaxInput) (*mcp.CallToolResult, *worklogsOut, error) {
 			ws, err := s.svc.Worklogs(ctx, in.Key, in.Max)
 			if err != nil {
 				return nil, nil, err
 			}
-			return text(render.Worklogs(ws))
+			return structured(render.Worklogs(ws), &worklogsOut{Worklogs: ws})
 		})
 	add(srv, "list_transitions", "List the status changes available for a ticket.", readOnly(),
-		func(ctx context.Context, _ *mcp.CallToolRequest, in keyInput) (*mcp.CallToolResult, any, error) {
+		func(ctx context.Context, _ *mcp.CallToolRequest, in keyInput) (*mcp.CallToolResult, *transitionsOut, error) {
 			ts, err := s.svc.Transitions(ctx, in.Key)
 			if err != nil {
 				return nil, nil, err
 			}
-			return text(render.Transitions(ts))
+			return structured(render.Transitions(ts), &transitionsOut{Transitions: ts})
 		})
 	add(srv, "list_editable_fields", "List the fields that can be changed on a ticket, with their types and allowed values.", readOnly(),
-		func(ctx context.Context, _ *mcp.CallToolRequest, in keyInput) (*mcp.CallToolResult, any, error) {
+		func(ctx context.Context, _ *mcp.CallToolRequest, in keyInput) (*mcp.CallToolResult, *fieldsOut, error) {
 			fs, err := s.svc.EditableFields(ctx, in.Key)
 			if err != nil {
 				return nil, nil, err
 			}
-			return text(render.EditableFields(fs))
+			return structured(render.EditableFields(fs), &fieldsOut{Fields: fs})
 		})
 	add(srv, "list_link_types", "List the link relations (e.g. \"blocks\", \"is blocked by\") available for link_issues.", readOnly(),
-		func(ctx context.Context, _ *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, any, error) {
+		func(ctx context.Context, _ *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, *linkTypesOut, error) {
 			ls, err := s.svc.LinkTypes(ctx)
 			if err != nil {
 				return nil, nil, err
 			}
-			return text(render.LinkTypes(ls))
+			return structured(render.LinkTypes(ls), &linkTypesOut{LinkTypes: ls})
 		})
 	add(srv, "list_projects", "List projects in which the user can create tickets.", readOnly(),
-		func(ctx context.Context, _ *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, any, error) {
+		func(ctx context.Context, _ *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, *projectsOut, error) {
 			ps, err := s.svc.Projects(ctx)
 			if err != nil {
 				return nil, nil, err
 			}
-			return text(render.Projects(ps))
+			return structured(render.Projects(ps), &projectsOut{Projects: ps})
 		})
 	add(srv, "list_boards", "List Jira Software boards, optionally of one project.", readOnly(),
-		func(ctx context.Context, _ *mcp.CallToolRequest, in boardsInput) (*mcp.CallToolResult, any, error) {
+		func(ctx context.Context, _ *mcp.CallToolRequest, in boardsInput) (*mcp.CallToolResult, *boardsOut, error) {
 			bs, err := s.svc.Boards(ctx, in.Project)
 			if err != nil {
 				return nil, nil, err
 			}
-			return text(render.Boards(bs))
+			return structured(render.Boards(bs), &boardsOut{Boards: bs})
 		})
 	add(srv, "list_sprints", "List the active and future sprints of a board.", readOnly(),
-		func(ctx context.Context, _ *mcp.CallToolRequest, in boardInput) (*mcp.CallToolResult, any, error) {
+		func(ctx context.Context, _ *mcp.CallToolRequest, in boardInput) (*mcp.CallToolResult, *sprintsOut, error) {
 			ss, err := s.svc.Sprints(ctx, in.Board)
 			if err != nil {
 				return nil, nil, err
 			}
-			return text(render.Sprints(ss))
+			return structured(render.Sprints(ss), &sprintsOut{Sprints: ss})
 		})
 	add(srv, "get_active_sprint", "Show the user's tickets in the active sprint of a board, in board order, with the total number of tickets in the sprint.", readOnly(),
-		func(ctx context.Context, _ *mcp.CallToolRequest, in boardInput) (*mcp.CallToolResult, any, error) {
+		func(ctx context.Context, _ *mcp.CallToolRequest, in boardInput) (*mcp.CallToolResult, *sprintIssuesOut, error) {
 			gs, err := s.svc.ActiveSprints(ctx, in.Board, in.Max)
 			if err != nil {
 				return nil, nil, err
 			}
-			return text(render.BoardIssues(gs))
+			return structured(render.BoardIssues(gs), &sprintIssuesOut{Sprints: gs})
 		})
 	add(srv, "get_backlog", "Show the user's tickets in the backlog of a board, in board order, with the total number of tickets in the backlog.", readOnly(),
-		func(ctx context.Context, _ *mcp.CallToolRequest, in boardInput) (*mcp.CallToolResult, any, error) {
+		func(ctx context.Context, _ *mcp.CallToolRequest, in boardInput) (*mcp.CallToolResult, *core.BoardIssues, error) {
 			g, err := s.svc.Backlog(ctx, in.Board, in.Max)
 			if err != nil {
 				return nil, nil, err
 			}
-			return text(render.BoardIssues([]core.BoardIssues{*g}))
+			return structured(render.BoardIssues([]core.BoardIssues{*g}), g)
 		})
 	add(srv, "list_issue_types", "List the issue types the user can create in a project.", readOnly(),
-		func(ctx context.Context, _ *mcp.CallToolRequest, in projectInput) (*mcp.CallToolResult, any, error) {
+		func(ctx context.Context, _ *mcp.CallToolRequest, in projectInput) (*mcp.CallToolResult, *issueTypesOut, error) {
 			ts, err := s.svc.IssueTypes(ctx, in.Project)
 			if err != nil {
 				return nil, nil, err
 			}
-			return text(render.IssueTypes(ts))
+			return structured(render.IssueTypes(ts), &issueTypesOut{IssueTypes: ts})
 		})
 	add(srv, "get_attachment", "Download an attachment of a ticket. Small text files and images are returned inline; the file is saved locally in any case.", readOnly(),
 		func(ctx context.Context, _ *mcp.CallToolRequest, in attachmentInput) (*mcp.CallToolResult, any, error) {
