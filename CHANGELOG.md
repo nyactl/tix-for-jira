@@ -4,6 +4,8 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ## Unreleased
 
+## [0.2.0] - 2026-10-13
+
 ### Added
 
 - `tix config dev-builds on|off`: development builds and the integration tests only use profiles that opted in; the default profile never can.
@@ -23,7 +25,7 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 ### Changed
 
 - Rich text is converted by the [go-adf](https://github.com/nyactl/go-adf) module. Comments and fields written as Markdown now always produce valid ADF (a heading in a list item or a nested quote no longer makes Jira reject the change), and text from Jira that looks like Markdown, such as `#`, `*` or `[x]`, is escaped so it is shown literally.
-- Keychain storage, the MCP approval flow, labels for people, profiles and the HTTP client core now come from the [approvekit](https://github.com/nyactl/approvekit) module, shared with the upcoming Confluence tool. Existing profiles and stored tokens keep working.
+- Keychain storage, the MCP approval flow, labels for people, profiles and the HTTP client core now come from the [approvekit](https://github.com/nyactl/approvekit) module, shared with the Confluence tool [dok-for-confluence](https://github.com/nyactl/dok-for-confluence). Existing profiles and stored tokens keep working.
 
 ## [0.1.1] - 2026-10-09
 
@@ -49,5 +51,6 @@ First release, tested against Jira Cloud with a non-admin account.
 - Markdown <-> Atlassian Document Format conversion with `@[label]` mentions.
 - Profiles (`--profile`, `TIX_JIRA_PROFILE`) to switch between sites; development builds require an explicit profile.
 
+[0.2.0]: https://github.com/nyactl/tix-for-jira/releases/tag/v0.2.0
 [0.1.1]: https://github.com/nyactl/tix-for-jira/releases/tag/v0.1.1
 [0.1.0]: https://github.com/nyactl/tix-for-jira/releases/tag/v0.1.0
