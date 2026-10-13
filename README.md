@@ -4,7 +4,7 @@
 
 - **Privacy scope:** by default only tickets assigned to you are visible. Other people appear as "Person A", "Person B", …, never by name, email or account ID.
 - **Every change needs your approval:** in the terminal you confirm each write; over MCP each write opens an approval dialog that the assistant cannot answer.
-- **Token in the Keychain:** your API token is stored in the macOS Keychain, readable only by tix-for-jira without a prompt.
+- **Token in the system keychain:** your API token is stored in the macOS Keychain, readable only by tix-for-jira without a prompt, or on Linux in the Secret Service (GNOME Keyring, KWallet). Never in a file or environment variable.
 - **No admin rights needed:** everything runs with your own Jira permissions.
 
 For Confluence pages there is a companion tool, [dok-for-confluence](https://github.com/nyactl/dok-for-confluence), with the same approval and privacy model.
@@ -13,7 +13,7 @@ For Confluence pages there is a companion tool, [dok-for-confluence](https://git
 
 ## Install
 
-Requires macOS. With Homebrew:
+Runs on macOS and Linux. With Homebrew:
 
 ```sh
 brew install nyactl/tap/tix-for-jira
@@ -26,6 +26,8 @@ go install github.com/nyactl/tix-for-jira/cmd/tix@latest
 ```
 
 Both install the `tix` command. After each upgrade, macOS asks once whether the new binary may read the token from the Keychain.
+
+On Linux, tix-for-jira needs a running Secret Service, which desktop sessions with GNOME Keyring or KWallet provide. Unlike the macOS Keychain, the Secret Service does not tie the token to tix-for-jira: any program in your unlocked session can read it. Release archives for Linux (amd64, arm64) are also attached to each [GitHub release](https://github.com/nyactl/tix-for-jira/releases).
 
 Release archives are signed with cosign; see [RELEASING.md](RELEASING.md#verifying-release-signatures) to verify them.
 
@@ -159,7 +161,8 @@ Names that someone typed into free text are replaced only if that person also ap
 
 ## Limitations
 
-- Jira Cloud only; macOS only (Keychain).
+- Jira Cloud only; macOS and Linux (no Windows).
+- On Linux, a Secret Service is required; headless servers without one cannot store the token.
 - People fields (assignee, reviewers) cannot be changed; tickets you create are assigned to you.
 - No deleting of tickets, comments or worklogs, and no uploads.
 - Durations are hours and minutes; days and weeks depend on site settings and are rejected.

@@ -23,7 +23,8 @@ jobs:
 
   release:
     needs: test
-    # The Keychain code uses cgo, so the binaries are built on macOS.
+    # The Keychain code uses cgo, so the macOS binaries are built on macOS;
+    # the Linux binaries cross-compile without cgo.
     runs-on: macos-latest
     permissions:
       contents: write

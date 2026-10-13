@@ -4,7 +4,7 @@ tix-for-jira lets an assistant work on **your own** Jira Cloud tickets through M
 
 1. **Scope:** by default the assistant only sees tickets assigned to you, and other people appear as stable placeholders ("Person A"), never by name, email or account ID.
 2. **Consent:** every write needs explicit approval from the human. An assistant can request a write; it cannot approve it.
-3. **Containment:** the API token lives in the macOS Keychain, readable only by the tix-for-jira binary without a prompt. Nothing the assistant controls can widen the scope, read the token, or skip a confirmation.
+3. **Containment:** the API token lives in the macOS Keychain, readable only by the tix-for-jira binary without a prompt, or on Linux in the Secret Service of the user's session. Nothing the assistant controls can widen the scope, read the token, or skip a confirmation.
 
 ## Components
 
@@ -61,7 +61,7 @@ Deleting issues, comments or worklogs is not supported.
 
 ## Credentials
 
-`tix auth login` asks for site, email and API token on the terminal (token without echo), verifies them against `/rest/api/3/myself`, and stores the token in the login Keychain. The item is created by tix-for-jira itself, so its access list trusts only the tix-for-jira binary; other programs, including `security find-generic-password`, trigger a macOS prompt. Rebuilding an unsigned binary changes its identity, so macOS asks once more after each rebuild.
+`tix auth login` asks for site, email and API token on the terminal (token without echo), verifies them against `/rest/api/3/myself`, and stores the token in the login Keychain. The item is created by tix-for-jira itself, so its access list trusts only the tix-for-jira binary; other programs, including `security find-generic-password`, trigger a macOS prompt. Rebuilding an unsigned binary changes its identity, so macOS asks once more after each rebuild. On Linux the token goes to the Secret Service (GNOME Keyring, KWallet) in the default collection; it is unlocked with the session and not bound to the binary. There is no fallback to a file or environment variable.
 
 API tokens expire after at most a year. The expiry date can be recorded at login; tix-for-jira warns two weeks before it.
 
