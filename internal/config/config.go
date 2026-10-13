@@ -7,6 +7,8 @@ package config
 import (
 	"errors"
 	"fmt"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/nyactl/approvekit/profile"
@@ -24,6 +26,39 @@ const (
 type Config struct {
 	profile.Account
 	Privacy PrivacyMode `json:"privacy"`
+	// Searches are saved JQL queries by name, run with `tix search @name`.
+	Searches map[string]string `json:"searches,omitempty"`
+	// DefaultProject is used by `tix create` without --project.
+	DefaultProject string `json:"defaultProject,omitempty"`
+}
+
+var (
+	searchNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
+	projectKeyRe = regexp.MustCompile(`^[A-Z][A-Z0-9_]{0,254}$`)
+)
+
+const maxSavedJQL = 2000
+
+// SearchName checks the name of a saved search; a leading @ is dropped.
+func SearchName(name string) (string, error) {
+	name = strings.TrimPrefix(strings.TrimSpace(name), "@")
+	if !searchNameRe.MatchString(name) {
+		return "", fmt.Errorf("invalid search name %q: use lowercase letters, digits and dashes", name)
+	}
+	return name, nil
+}
+
+// SavedSearch returns the JQL saved under name (with or without @).
+func (c *Config) SavedSearch(name string) (string, error) {
+	n, err := SearchName(name)
+	if err != nil {
+		return "", err
+	}
+	jql, ok := c.Searches[n]
+	if !ok {
+		return "", fmt.Errorf("no saved search %q; see `tix config search list`", n)
+	}
+	return jql, nil
 }
 
 // DefaultProfile is used when no profile is selected; it is meant for
@@ -73,6 +108,17 @@ func (c *Config) Validate() error {
 	case PrivacyOwn, PrivacyOff:
 	default:
 		return fmt.Errorf("invalid privacy mode %q (want %q or %q)", c.Privacy, PrivacyOwn, PrivacyOff)
+	}
+	for name, jql := range c.Searches {
+		if !searchNameRe.MatchString(name) {
+			return fmt.Errorf("invalid search name %q", name)
+		}
+		if strings.TrimSpace(jql) == "" || len(jql) > maxSavedJQL {
+			return fmt.Errorf("saved search %q must have between 1 and %d characters of JQL", name, maxSavedJQL)
+		}
+	}
+	if c.DefaultProject != "" && !projectKeyRe.MatchString(c.DefaultProject) {
+		return fmt.Errorf("invalid default project %q", c.DefaultProject)
 	}
 	return nil
 }

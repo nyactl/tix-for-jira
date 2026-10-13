@@ -34,13 +34,20 @@ type harness struct {
 
 func connect(t *testing.T, writes bool, mode config.PrivacyMode, answer string, protocol string) *harness {
 	t.Helper()
+	return connectWith(t, writes, mode, answer, protocol, Options{})
+}
+
+// connectWith is connect with extra server options.
+func connectWith(t *testing.T, writes bool, mode config.PrivacyMode, answer string, protocol string, extra Options) *harness {
+	t.Helper()
 	ctx := context.Background()
 	h := &harness{fake: site(t)}
 	svc, err := core.New(ctx, jira.New(h.fake.URL(), "me@example.com", "tok-me", "test", atlassian.WithTransport(h.fake.Transport())), mode)
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := New(svc, Options{Version: "test", AllowWrites: writes, DownloadDir: t.TempDir(), Target: "Jira site: fake (profile test)"})
+	srv := New(svc, Options{Version: "test", AllowWrites: writes, DownloadDir: t.TempDir(), Target: "Jira site: fake (profile test)",
+		Searches: extra.Searches, DefaultProject: extra.DefaultProject})
 	st, ct := mcp.NewInMemoryTransports()
 	if _, err := srv.Connect(ctx, st, nil); err != nil {
 		t.Fatal(err)
@@ -109,7 +116,7 @@ func TestReadOnlyByDefault(t *testing.T) {
 			t.Errorf("%s is not marked read-only", name)
 		}
 	}
-	if len(tools) != 18 {
+	if len(tools) != 19 {
 		t.Errorf("got %d read tools", len(tools))
 	}
 	if instr := h.session.InitializeResult().Instructions; !strings.Contains(instr, "read-only") || !strings.Contains(instr, "Person A") {
@@ -246,5 +253,27 @@ func TestCheckUploadPath(t *testing.T) {
 		if err := checkUploadPath(p); err == nil {
 			t.Errorf("%s was accepted", p)
 		}
+	}
+}
+
+func TestSavedSearchAndDefaultProject(t *testing.T) {
+	t.Parallel()
+	h := connectWith(t, true, config.PrivacyOwn, "approve", "", Options{Searches: map[string]string{"all": "project = PROJ"}, DefaultProject: "PROJ"})
+	out, isErr := h.call(t, "search_issues", map[string]any{"jql": "@all"})
+	if isErr || !strings.Contains(out, "PROJ-1") || strings.Contains(out, "PROJ-2") {
+		t.Errorf("search (err=%v): %s", isErr, out)
+	}
+	if last := h.fake.JQL[len(h.fake.JQL)-1]; last != "assignee = currentUser() AND (project = PROJ)" {
+		t.Errorf("JQL = %q", last)
+	}
+	if out, isErr := h.call(t, "search_issues", map[string]any{"jql": "@missing"}); !isErr || !strings.Contains(out, "no saved search") {
+		t.Errorf("missing (err=%v): %s", isErr, out)
+	}
+	if out, _ := h.call(t, "list_saved_searches", map[string]any{}); !strings.Contains(out, "@all: project = PROJ") {
+		t.Errorf("list: %s", out)
+	}
+	out, isErr = h.call(t, "create_issue", map[string]any{"type": "Task", "summary": "Default project"})
+	if isErr || !strings.Contains(out, "Created PROJ-") {
+		t.Errorf("create (err=%v): %s", isErr, out)
 	}
 }

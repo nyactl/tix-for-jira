@@ -25,6 +25,10 @@ type Options struct {
 	DownloadDir string
 	// Target names the site and profile; it heads every approval dialog.
 	Target string
+	// Searches are the profile's saved searches, usable as @name.
+	Searches map[string]string
+	// DefaultProject is used by create_issue without a project.
+	DefaultProject string
 }
 
 type server struct {
@@ -168,13 +172,26 @@ func (s *server) registerReads(srv *mcp.Server) {
 			}
 			return text(render.IssueList(list))
 		})
-	add(srv, "search_issues", "Search tickets with JQL, limited to the privacy scope.", readOnly(),
+	add(srv, "search_issues", "Search tickets with JQL, or with a saved search written as @name (see list_saved_searches), limited to the privacy scope.", readOnly(),
 		func(ctx context.Context, _ *mcp.CallToolRequest, in searchInput) (*mcp.CallToolResult, any, error) {
-			list, err := s.svc.Search(ctx, in.JQL, in.Max)
+			jql := in.JQL
+			if strings.HasPrefix(strings.TrimSpace(jql), "@") {
+				name := strings.TrimPrefix(strings.TrimSpace(jql), "@")
+				saved, ok := s.opts.Searches[name]
+				if !ok {
+					return nil, nil, fmt.Errorf("no saved search @%s; see list_saved_searches", name)
+				}
+				jql = saved
+			}
+			list, err := s.svc.Search(ctx, jql, in.Max)
 			if err != nil {
 				return nil, nil, err
 			}
 			return text(render.IssueList(list))
+		})
+	add(srv, "list_saved_searches", "List the user's saved searches, usable in search_issues as @name.", readOnly(),
+		func(ctx context.Context, _ *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, any, error) {
+			return text(render.SavedSearches(s.opts.Searches))
 		})
 	add(srv, "get_issue", "Show a ticket: fields, description, related tickets, attachments and custom fields.", readOnly(),
 		func(ctx context.Context, _ *mcp.CallToolRequest, in keyInput) (*mcp.CallToolResult, any, error) {
@@ -324,7 +341,7 @@ type transitionInput struct {
 }
 
 type createInput struct {
-	Project     string            `json:"project" jsonschema:"Project key"`
+	Project     string            `json:"project,omitempty" jsonschema:"Project key; defaults to the user's default project"`
 	Type        string            `json:"type" jsonschema:"Issue type name, see list_issue_types"`
 	Summary     string            `json:"summary" jsonschema:"One-line summary"`
 	Description string            `json:"description,omitempty" jsonschema:"Description in Markdown"`
@@ -394,7 +411,14 @@ func (s *server) registerWrites(srv *mcp.Server) {
 		})
 	add(srv, "create_issue", "Create a ticket assigned to the user. The user approves it first.", writeAnnotations(core.Additive),
 		func(ctx context.Context, req *mcp.CallToolRequest, in createInput) (*mcp.CallToolResult, any, error) {
-			p, err := s.svc.PlanCreate(ctx, core.CreateInput{Project: in.Project, Type: in.Type, Summary: in.Summary, Description: in.Description,
+			project := in.Project
+			if project == "" {
+				project = s.opts.DefaultProject
+			}
+			if project == "" {
+				return nil, nil, errors.New("name the project; the user has no default project")
+			}
+			p, err := s.svc.PlanCreate(ctx, core.CreateInput{Project: project, Type: in.Type, Summary: in.Summary, Description: in.Description,
 				Labels: in.Labels, Priority: in.Priority, Parent: in.Parent, Fields: in.Fields})
 			return s.approveThenApply(ctx, req, "create_issue", in, p, err)
 		})
