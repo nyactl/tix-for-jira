@@ -7,6 +7,8 @@
 - **Token in the Keychain:** your API token is stored in the macOS Keychain, readable only by tix-for-jira without a prompt.
 - **No admin rights needed:** everything runs with your own Jira permissions.
 
+For Confluence pages there is a companion tool, [dok-for-confluence](https://github.com/nyactl/dok-for-confluence), with the same approval and privacy model.
+
 > Not affiliated with or endorsed by Atlassian. Jira is a trademark of Atlassian.
 
 ## Install
