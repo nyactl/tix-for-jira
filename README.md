@@ -114,6 +114,8 @@ No credentials go into the client configuration; tix-for-jira reads them from it
 |---|---|
 | `whoami`, `my_issues`, `search_issues`, `list_saved_searches`, `get_issue`, `list_comments`, `get_history`, `get_status_times`, `list_worklogs`, `list_transitions`, `list_editable_fields`, `get_attachment`, `list_link_types`, `list_projects`, `list_issue_types`, `list_boards`, `list_sprints`, `get_active_sprint`, `get_backlog` | `add_comment`, `update_fields`, `transition_issue`, `create_issue`, `log_work`, `link_issues`, `assign_to_me`, `attach_file`, `add_web_link`, `add_web_link`, `watch_issue`, `unwatch_issue`, `move_to_sprint` |
 
+Prompts, offered by MCP clients as ready-made requests: `morning-overview` (what changed on my tickets since yesterday), `ticket-summary` (goal, state, open questions and next steps of one ticket) and `sprint-status` (my part of the active sprint). They only use the read tools above.
+
 Every tool carries `readOnlyHint` / `destructiveHint` annotations.
 
 ## Profiles: test and production

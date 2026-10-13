@@ -61,6 +61,7 @@ func New(svc *core.Service, opts Options) *mcp.Server {
 		Instructions: instructions(svc.Site(), svc.Mode(), opts.AllowWrites),
 	})
 	s.registerReads(srv)
+	s.registerPrompts(srv)
 	if opts.AllowWrites {
 		s.registerWrites(srv)
 	}
