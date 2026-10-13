@@ -1,9 +1,11 @@
 package cli
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -22,6 +24,22 @@ type script struct {
 	secrets []string
 	asked   []string
 	noTTY   bool
+	// pick is what Pick returns; picked records the lines it was shown.
+	pick   pickChoice
+	picked []string
+}
+
+type pickChoice struct {
+	index  int
+	action PickAction
+}
+
+func (s *script) Pick(_ string, lines []string) (int, PickAction, error) {
+	if s.noTTY {
+		return 0, PickQuit, errNoTerminal
+	}
+	s.picked = lines
+	return s.pick.index, s.pick.action, nil
 }
 
 func (s *script) Prompt(q string) (string, error) {
@@ -550,5 +568,100 @@ func TestCreateUsesDefaultProject(t *testing.T) {
 	}
 	if out, _, _ := e.run(t, "config", "project", "--clear"); !strings.Contains(out, "No default project") {
 		t.Errorf("clear: %q", out)
+	}
+}
+
+func TestPickModel(t *testing.T) {
+	t.Parallel()
+	m := &pickModel{n: 3}
+	for _, k := range []string{"up", "down", "down", "down", "k", "j", "j"} {
+		if _, done := m.key(k); done {
+			t.Fatalf("%s ended the choice", k)
+		}
+	}
+	if m.cur != 2 {
+		t.Errorf("cursor = %d, want 2 (stays in range)", m.cur)
+	}
+	for k, want := range map[string]PickAction{"enter": PickShow, "o": PickOpen, "c": PickComment, "q": PickQuit, "ctrl-c": PickQuit, "esc": PickQuit} {
+		if a, done := m.key(k); !done || a != want {
+			t.Errorf("%s = %v, %v", k, a, done)
+		}
+	}
+	m.key("home")
+	if m.cur != 0 {
+		t.Errorf("home: %d", m.cur)
+	}
+}
+
+func TestReadKey(t *testing.T) {
+	t.Parallel()
+	r := bufio.NewReader(strings.NewReader("\x1b[A\x1b[Bj\r\x03\x1bOH" + "o"))
+	var got []string
+	for {
+		k, err := readKey(r)
+		if err != nil {
+			break
+		}
+		got = append(got, k)
+	}
+	if strings.Join(got, ",") != "up,down,j,enter,ctrl-c,home,o" {
+		t.Errorf("keys = %v", got)
+	}
+}
+
+func TestRenderPick(t *testing.T) {
+	t.Parallel()
+	lines := make([]string, 30)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("PROJ-%d line", i)
+	}
+	lines[25] = "PROJ-25 evil\x1b]0;title\x07 summary that is far too long for the terminal width"
+	out := renderPick("Tickets", lines, 25, 40, 10)
+	if !strings.Contains(out, "\x1b[7m> PROJ-25 evil") || strings.Contains(out, "PROJ-0 ") || strings.Contains(out, "\x07") || strings.Contains(out, "\x1b]0;") {
+		t.Errorf("render:\n%q", out)
+	}
+	if !strings.Contains(out, "…") {
+		t.Error("long line not clipped")
+	}
+}
+
+func TestPickCommand(t *testing.T) {
+	e := newEnv(t).loggedIn(t)
+	e.tty.pick = pickChoice{0, PickShow}
+	out, _, err := e.run(t, "pick")
+	if err != nil || !strings.Contains(out, "# PROJ-1: Mine") || len(e.tty.picked) != 1 || !strings.Contains(e.tty.picked[0], "PROJ-1") {
+		t.Fatalf("show: %q, %v, picked %v", out, err, e.tty.picked)
+	}
+	for _, l := range e.tty.picked {
+		if strings.Contains(l, "PROJ-2") {
+			t.Error("someone else's ticket offered")
+		}
+	}
+
+	e.tty.pick = pickChoice{0, PickOpen}
+	if _, _, err := e.run(t, "pick"); err != nil || len(e.opened) != 1 {
+		t.Errorf("open: %v, %v", err, e.opened)
+	}
+
+	e.tty.pick = pickChoice{0, PickComment}
+	e.tty.answers = []string{"Done from the picker", "n"}
+	if _, _, err := e.run(t, "pick"); err == nil || !strings.Contains(err.Error(), "not confirmed") {
+		t.Errorf("comment not confirmed: %v", err)
+	}
+	if n := len(e.fake.Issues["PROJ-1"].Comments); n != 0 {
+		t.Fatalf("%d comments without confirmation", n)
+	}
+	e.tty.answers = []string{"Done from the picker", "y"}
+	if _, _, err := e.run(t, "pick"); err != nil || len(e.fake.Issues["PROJ-1"].Comments) != 1 {
+		t.Errorf("comment: %v", err)
+	}
+
+	e.tty.pick = pickChoice{0, PickQuit}
+	if out, _, err := e.run(t, "pick"); err != nil || out != "" {
+		t.Errorf("quit: %q, %v", out, err)
+	}
+	e.tty.noTTY = true
+	if _, _, err := e.run(t, "pick"); !errors.Is(err, errNoTerminal) {
+		t.Errorf("without a terminal: %v", err)
 	}
 }

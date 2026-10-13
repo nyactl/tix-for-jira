@@ -62,6 +62,7 @@ If a scope is missing, tix names the scopes the failed request needs.
 ```sh
 tix mine                         # your open tickets, most recently updated first
 tix mine --since -1d             # ... changed in the last day
+tix pick                         # choose with the arrow keys, then show, open or comment
 tix show PROJ-123                # one ticket with description, links, attachments
 tix open PROJ-123                # in the browser (--print shows the URL)
 tix comments PROJ-123
