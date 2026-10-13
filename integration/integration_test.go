@@ -197,6 +197,13 @@ func TestIntegration(t *testing.T) {
 		}
 	})
 
+	t.Run("browse URL is on the site", func(t *testing.T) {
+		d, err := s.svc.Issue(ctx, a)
+		if err != nil || d.URL != s.cfg.Site+"/browse/"+a {
+			t.Errorf("URL = %q, %v", d.URL, err)
+		}
+	})
+
 	t.Run("my_issues finds new tickets", func(t *testing.T) {
 		list, err := s.svc.MyIssues(ctx, core.MyIssuesOptions{Since: "-1h", Text: s.run})
 		if err != nil {

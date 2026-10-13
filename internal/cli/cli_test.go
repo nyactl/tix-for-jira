@@ -49,6 +49,7 @@ type env struct {
 	secrets *keychain.Memory
 	tty     *script
 	dev     bool // run as a development build instead of a release
+	opened  []string
 }
 
 func (e *env) version() string {
@@ -87,7 +88,8 @@ func (e *env) runStdin(t *testing.T, stdin string, args ...string) (string, stri
 	t.Helper()
 	var out, errOut bytes.Buffer
 	app := &App{Version: e.version(), In: strings.NewReader(stdin), Out: &out, Err: &errOut, TTY: e.tty, Secrets: e.secrets, Transport: e.fake.Transport(),
-		Gateway: e.fake.URL(), Now: func() time.Time { return time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC) }}
+		Gateway: e.fake.URL(), Now: func() time.Time { return time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC) },
+		Browse: func(_ context.Context, url string) error { e.opened = append(e.opened, url); return nil }}
 	err := app.Execute(context.Background(), args)
 	return out.String(), errOut.String(), err
 }
@@ -474,5 +476,27 @@ func TestLoginScopedTokenWithoutUserScope(t *testing.T) {
 	}
 	if _, err := config.Load(""); !errors.Is(err, config.ErrNotConfigured) {
 		t.Errorf("config saved despite failed login: %v", err)
+	}
+}
+
+func TestOpen(t *testing.T) {
+	e := newEnv(t).loggedIn(t)
+	if _, _, err := e.run(t, "open", "proj-1"); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.opened) != 1 || e.opened[0] != e.fake.URL()+"/browse/PROJ-1" {
+		t.Errorf("opened %v", e.opened)
+	}
+	out, _, err := e.run(t, "open", "PROJ-1", "--print")
+	if err != nil || strings.TrimSpace(out) != e.fake.URL()+"/browse/PROJ-1" || len(e.opened) != 1 {
+		t.Errorf("--print: %q, %v, opened %v", out, err, e.opened)
+	}
+	for _, key := range []string{"PROJ-2", "not a key", "PROJ-1; rm -rf ~"} {
+		if _, _, err := e.run(t, "open", key); err == nil {
+			t.Errorf("%q was opened", key)
+		}
+	}
+	if len(e.opened) != 1 {
+		t.Errorf("opened %v", e.opened)
 	}
 }
