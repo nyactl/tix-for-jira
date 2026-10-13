@@ -200,6 +200,14 @@ func (s *server) registerReads(srv *mcp.Server) {
 			}
 			return text(render.History(hs))
 		})
+	add(srv, "get_status_times", "Show how long a ticket spent in each status, from its change history, and how often it entered each.", readOnly(),
+		func(ctx context.Context, _ *mcp.CallToolRequest, in keyInput) (*mcp.CallToolResult, any, error) {
+			v, err := s.svc.StatusTimes(ctx, in.Key)
+			if err != nil {
+				return nil, nil, err
+			}
+			return text(render.StatusTimes(v))
+		})
 	add(srv, "list_worklogs", "List work logged on a ticket.", readOnly(),
 		func(ctx context.Context, _ *mcp.CallToolRequest, in keyMaxInput) (*mcp.CallToolResult, any, error) {
 			ws, err := s.svc.Worklogs(ctx, in.Key, in.Max)

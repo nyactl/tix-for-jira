@@ -369,3 +369,22 @@ func BoardIssues(groups []core.BoardIssues) string {
 	}
 	return done(&b)
 }
+
+// StatusTimes renders the time a ticket spent in each status.
+func StatusTimes(v *core.StatusTimesView) string {
+	var b strings.Builder
+	line(&b, "Time in status for %s (created %s, %d status changes):", v.Key, v.Created, v.Changes)
+	line(&b, "")
+	for _, st := range v.Statuses {
+		visits := "1 time"
+		if st.Visits != 1 {
+			visits = fmt.Sprintf("%d times", st.Visits)
+		}
+		current := ""
+		if st.Current {
+			current = ", current status"
+		}
+		line(&b, "- %s: %s (entered %s%s)", st.Status, st.Duration, visits, current)
+	}
+	return done(&b)
+}

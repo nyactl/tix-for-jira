@@ -738,6 +738,34 @@ func TestIntegration(t *testing.T) {
 		}
 	})
 
+	t.Run("time in status adds up", func(t *testing.T) {
+		v, err := s.svc.StatusTimes(ctx, a)
+		if err != nil {
+			t.Fatal(err)
+		}
+		d, err := s.svc.Issue(ctx, a)
+		if err != nil {
+			t.Fatal(err)
+		}
+		created, err := time.ParseInLocation("2006-01-02 15:04", d.Created, time.Local)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var total int64
+		current := ""
+		for _, st := range v.Statuses {
+			total += st.Seconds
+			if st.Current {
+				current = st.Status
+			}
+		}
+		// Created is shown to the minute, so allow two minutes of slack.
+		age := int64(time.Since(created) / time.Second)
+		if v.Changes == 0 || current != d.Status || total < age-120 || total > age+120 {
+			t.Errorf("status times = %+v; current %q, ticket status %q; total %ds, age %ds", v, current, d.Status, total, age)
+		}
+	})
+
 	t.Run("history lists my changes", func(t *testing.T) {
 		hist, err := s.svc.History(ctx, a, "-1h", 100)
 		if err != nil || len(hist) < 3 {

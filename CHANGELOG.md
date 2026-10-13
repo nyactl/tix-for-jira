@@ -7,6 +7,7 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 ### Added
 
 - `tix open KEY` opens one of your tickets in the browser; `--print` shows the URL instead.
+- Time in status: `tix history KEY --status-times` and MCP `get_status_times` show how long a ticket spent in each status and how often it entered it.
 
 ## [0.2.0] - 2026-10-13
 

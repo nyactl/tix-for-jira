@@ -75,6 +75,13 @@ func (a *App) addReadCommands(root *cobra.Command) {
 	comments.Flags().Int("max", 50, "maximum number of comments")
 
 	history := keyCmd(a, "history <key>", "Show a ticket's change history", func(cmd *cobra.Command, svc *core.Service, key string) error {
+		if statusTimes, _ := cmd.Flags().GetBool("status-times"); statusTimes {
+			v, err := svc.StatusTimes(cmd.Context(), key)
+			if err != nil {
+				return err
+			}
+			return a.print(cmd, v, func() string { return render.StatusTimes(v) })
+		}
 		since, _ := cmd.Flags().GetString("since")
 		max, _ := cmd.Flags().GetInt("max")
 		hs, err := svc.History(cmd.Context(), key, since, max)
@@ -85,6 +92,7 @@ func (a *App) addReadCommands(root *cobra.Command) {
 	})
 	history.Flags().String("since", "", "only changes since: -12h, -7d or 2026-10-01")
 	history.Flags().Int("max", 100, "maximum number of entries (newest kept)")
+	history.Flags().Bool("status-times", false, "show how long the ticket spent in each status instead")
 
 	worklogs := keyCmd(a, "worklogs <key>", "List work logged on a ticket", func(cmd *cobra.Command, svc *core.Service, key string) error {
 		ws, err := svc.Worklogs(cmd.Context(), key, 100)

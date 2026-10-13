@@ -634,3 +634,107 @@ func inlineable(mime string) bool {
 	}
 	return false
 }
+
+// StatusTimes adds up how long a ticket was in each status, from its change
+// history: from creation to the first status change, between changes, and
+// from the last change until now for the current status.
+func (s *Service) StatusTimes(ctx context.Context, key string) (*StatusTimesView, error) {
+	issue, err := s.scoped(ctx, key, "created")
+	if err != nil {
+		return nil, err
+	}
+	created, err := parseJiraTime(issue.Fields.Created)
+	if err != nil {
+		return nil, fmt.Errorf("%s has no valid creation time: %w", issue.Key, err)
+	}
+	entries, err := s.jc.Changelog(ctx, issue.Key, 1000)
+	if err != nil {
+		return nil, err
+	}
+	type change struct {
+		at       time.Time
+		from, to string
+	}
+	var changes []change
+	for _, e := range entries {
+		at, err := parseJiraTime(e.Created)
+		if err != nil {
+			continue
+		}
+		for _, it := range e.Items {
+			if it.Field == "status" {
+				changes = append(changes, change{at, it.FromString, it.ToString})
+			}
+		}
+	}
+	sort.SliceStable(changes, func(i, j int) bool { return changes[i].at.Before(changes[j].at) })
+
+	current := ""
+	if issue.Fields.Status != nil {
+		current = issue.Fields.Status.Name
+	}
+	start := current
+	if len(changes) > 0 {
+		start = changes[0].from
+	}
+	view := &StatusTimesView{Key: issue.Key, Created: s.when(issue.Fields.Created), Changes: len(changes)}
+	index := map[string]int{}
+	spend := func(status string, d time.Duration, enter bool) {
+		i, ok := index[status]
+		if !ok {
+			i = len(view.Statuses)
+			index[status] = i
+			view.Statuses = append(view.Statuses, StatusTime{Status: status})
+		}
+		st := &view.Statuses[i]
+		if d > 0 {
+			st.Seconds += int64(d / time.Second)
+		}
+		if enter {
+			st.Visits++
+		}
+	}
+	spend(start, 0, true)
+	prev := created
+	for _, c := range changes {
+		spend(c.from, c.at.Sub(prev), false)
+		spend(c.to, 0, true)
+		prev = c.at
+	}
+	spend(current, s.now().Sub(prev), false)
+	for i := range view.Statuses {
+		st := &view.Statuses[i]
+		st.Duration = formatDuration(st.Seconds)
+		st.Current = st.Status == current
+	}
+	return view, nil
+}
+
+func parseJiraTime(ts string) (time.Time, error) {
+	for _, layout := range []string{"2006-01-02T15:04:05.000-0700", time.RFC3339} {
+		if t, err := time.Parse(layout, ts); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("unknown time format %q", ts)
+}
+
+// formatDuration writes a duration in days, hours and minutes, with the two
+// largest units.
+func formatDuration(secs int64) string {
+	if secs < 60 {
+		return "under 1m"
+	}
+	d, h, m := secs/86400, secs%86400/3600, secs%3600/60
+	switch {
+	case d > 0 && h > 0:
+		return fmt.Sprintf("%dd %dh", d, h)
+	case d > 0:
+		return fmt.Sprintf("%dd", d)
+	case h > 0 && m > 0:
+		return fmt.Sprintf("%dh %dm", h, m)
+	case h > 0:
+		return fmt.Sprintf("%dh", h)
+	}
+	return fmt.Sprintf("%dm", m)
+}
