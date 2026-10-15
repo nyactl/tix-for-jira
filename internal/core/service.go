@@ -45,6 +45,11 @@ func New(ctx context.Context, jc *jira.Client, mode config.PrivacyMode) (*Servic
 	return &Service{jc: jc, people: people.New(people.Mode(mode), person(me)), now: time.Now}, nil
 }
 
+// KeepLabels keeps people's labels in store, so a person has the same label
+// in every command and session of the profile, and mentions can name people
+// shown earlier.
+func (s *Service) KeepLabels(store people.LabelStore) { s.people.WithStore(store) }
+
 // Mode returns the privacy mode.
 func (s *Service) Mode() config.PrivacyMode { return config.PrivacyMode(s.people.Mode()) }
 

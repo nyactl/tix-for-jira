@@ -45,7 +45,7 @@ func instructions(site string, mode config.PrivacyMode, writes bool) string {
 		b.WriteString("Privacy scope is on: only tickets assigned to the user are visible. Other tickets, including linked ones, show only key, type and status. ")
 		b.WriteString("People other than the user appear as stable labels such as \"Person A\"; the user is \"Me\". Do not try to find out who a label is.\n\n")
 	}
-	b.WriteString("Mentions appear as @[label]. To mention someone in text you write, use the same @[label] form; only people already shown in this session can be mentioned.\n\n")
+	b.WriteString("Mentions appear as @[label]. To mention someone in text you write, use the same @[label] form; only people shown before, in this or an earlier session, can be mentioned. Labels stay the same across sessions.\n\n")
 	if writes {
 		b.WriteString("Every change (comment, field update, transition, new ticket, work log, link) is shown to the user for approval before it happens. If the user declines, do not retry the same change unless asked.")
 	} else {

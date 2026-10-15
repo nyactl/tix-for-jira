@@ -81,7 +81,7 @@ If a scope is missing, tix names the scopes the failed request needs.
 ```sh
 tix mine                         # your open tickets, most recently updated first
 tix mine --since -1d             # ... changed in the last day
-tix pick                         # browse with the arrow keys: show, open, comment; q quits
+tix pick                         # browse, typing to filter: Enter shows, Ctrl-O opens, Ctrl-T comments; Esc quits
 tix show PROJ-123                # one ticket with description, links, attachments
 tix open PROJ-123                # in the browser (--print shows the URL)
 tix comments PROJ-123
@@ -104,6 +104,12 @@ tix weblink PROJ-123 https://ci.example.com/run/7 "CI run"
 tix attach PROJ-123 ./screenshot.png   # upload a file (up to 50 MiB)
 tix sprint move PROJ-123 "Sprint 12"   # or: tix sprint move PROJ-123 backlog
 ```
+
+**Choosing instead of typing:** leave out the ticket key, as in `tix show`, `tix comment --body "…"` or `tix transition`, and a picker lists your open tickets: type part of the key or summary, move with the arrow keys, press Enter. `tix transition` without a status lets you choose one of the ticket's status changes the same way.
+
+**Tab completion:** `tix completion zsh` (or `bash`, `fish`, `powershell`) prints a completion script; see `tix completion zsh --help` for how to load it. Ticket keys complete with their summaries and `tix transition KEY` with the ticket's statuses; with a plugin such as [fzf-tab](https://github.com/Aloxaf/fzf-tab), completions show in fzf.
+
+**Mentions:** `@[Person A]` mentions the person shown as Person A. Labels stay the same for a profile across commands and MCP sessions, kept in a file next to the profile's config that holds only account IDs and labels, so you can mention anyone tix has shown you before.
 
 Add `--json` to any read command for machine-readable output. `tix help <command>` explains every option.
 

@@ -12,12 +12,14 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/nyactl/approvekit/atlassian"
 	"github.com/nyactl/approvekit/keychain"
+	"github.com/nyactl/approvekit/people"
 	"github.com/nyactl/approvekit/profile"
 	"github.com/nyactl/approvekit/sanitize"
 	"github.com/nyactl/tix-for-jira/internal/config"
@@ -181,7 +183,13 @@ func (a *App) service(cmd *cobra.Command) (*core.Service, *config.Config, error)
 		}
 		err = fmt.Errorf("%w; then run `tix auth login`", err)
 	}
-	return svc, cfg, err
+	if err != nil {
+		return nil, nil, err
+	}
+	if path, err := config.Path(prof); err == nil {
+		svc.KeepLabels(people.NewFileStore(strings.TrimSuffix(path, ".json") + ".labels.json"))
+	}
+	return svc, cfg, nil
 }
 
 // client returns a Jira client; a non-empty cloudID routes it through the
