@@ -70,9 +70,10 @@ func parseSets(sets []string) ([]core.FieldInput, error) {
 
 func (a *App) addWriteCommands(root *cobra.Command) {
 	comment := &cobra.Command{
-		Use:   "comment <key>",
-		Short: "Add a comment (Markdown; mention people as @[label])",
-		Args:  cobra.ExactArgs(1),
+		Use:               "comment [key]",
+		Short:             "Add a comment (Markdown; mention people as @[label], as shown by tix)",
+		Args:              cobra.MaximumNArgs(1),
+		ValidArgsFunction: a.completeTickets,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			body, err := textArg(cmd, "body")
 			if err != nil {
@@ -82,7 +83,11 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 			if err != nil {
 				return err
 			}
-			p, err := svc.PlanComment(cmd.Context(), args[0], body)
+			key, err := a.ticket(cmd.Context(), svc, args, 0)
+			if err != nil {
+				return err
+			}
+			p, err := svc.PlanComment(cmd.Context(), key, body)
 			return a.apply(cmd, svc, p, err)
 		},
 	}
@@ -90,11 +95,12 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 	_ = comment.MarkFlagRequired("body")
 
 	update := &cobra.Command{
-		Use:   "update <key>",
+		Use:   "update [key]",
 		Short: "Change fields; you confirm by typing the ticket key",
 		Example: `  tix update PROJ-1 --set "Summary=New title" --set "Labels=auth,urgent"
   tix update PROJ-1 --set "Description=$(cat notes.md)"`,
-		Args: cobra.ExactArgs(1),
+		Args:              cobra.MaximumNArgs(1),
+		ValidArgsFunction: a.completeTickets,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			sets, _ := cmd.Flags().GetStringArray("set")
 			changes, err := parseSets(sets)
@@ -105,7 +111,11 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 			if err != nil {
 				return err
 			}
-			p, err := svc.PlanUpdate(cmd.Context(), args[0], changes)
+			key, err := a.ticket(cmd.Context(), svc, args, 0)
+			if err != nil {
+				return err
+			}
+			p, err := svc.PlanUpdate(cmd.Context(), key, changes)
 			return a.apply(cmd, svc, p, err)
 		},
 	}
@@ -113,9 +123,11 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 	_ = update.MarkFlagRequired("set")
 
 	transition := &cobra.Command{
-		Use:   "transition <key> <status or transition>",
-		Short: "Change the status; you confirm by typing the ticket key",
-		Args:  cobra.ExactArgs(2),
+		Use:               "transition [key] [status or transition]",
+		Short:             "Change the status; you confirm by typing the ticket key",
+		Long:              "Change a ticket's status. Without a key you choose the ticket, and without a status one of its possible status changes.",
+		Args:              cobra.MaximumNArgs(2),
+		ValidArgsFunction: a.completeTransition,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := textArg(cmd, "comment")
 			if err != nil {
@@ -125,7 +137,15 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 			if err != nil {
 				return err
 			}
-			p, err := svc.PlanTransition(cmd.Context(), args[0], args[1], c)
+			key, err := a.ticket(cmd.Context(), svc, args, 0)
+			if err != nil {
+				return err
+			}
+			status, err := a.status(cmd.Context(), svc, key, args, 1)
+			if err != nil {
+				return err
+			}
+			p, err := svc.PlanTransition(cmd.Context(), key, status, c)
 			return a.apply(cmd, svc, p, err)
 		},
 	}
@@ -266,20 +286,29 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 
 	watchCmd := func(use, short string, watch bool) *cobra.Command {
 		return &cobra.Command{
-			Use:   use + " <key>",
-			Short: short,
-			Args:  cobra.ExactArgs(1),
+			Use:               use + " [key]",
+			Short:             short,
+			Args:              cobra.MaximumNArgs(1),
+			ValidArgsFunction: a.completeTickets,
 			RunE: func(cmd *cobra.Command, args []string) error {
 				svc, _, err := a.service(cmd)
 				if err != nil {
 					return err
 				}
-				p, err := svc.PlanWatch(cmd.Context(), args[0], watch)
+				key, err := a.ticket(cmd.Context(), svc, args, 0)
+				if err != nil {
+					return err
+				}
+				p, err := svc.PlanWatch(cmd.Context(), key, watch)
 				return a.apply(cmd, svc, p, err)
 			},
 		}
 	}
 
+	// Commands with more arguments complete the ticket key.
+	for _, c := range []*cobra.Command{logWork, link, weblink, attach} {
+		c.ValidArgsFunction = a.completeTickets
+	}
 	root.AddCommand(comment, update, transition, create, logWork, link, weblink, take, attach,
 		watchCmd("watch", "Watch a ticket to get its notifications", true),
 		watchCmd("unwatch", "Stop watching a ticket", false))

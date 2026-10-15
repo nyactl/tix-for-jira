@@ -63,7 +63,7 @@ func (a *App) addReadCommands(root *cobra.Command) {
 	}
 	search.Flags().Int("max", 50, "maximum number of tickets")
 
-	show := keyCmd(a, "show <key>", "Show a ticket", func(cmd *cobra.Command, svc *core.Service, key string) error {
+	show := a.ticketCmd("show [key]", "Show a ticket", func(cmd *cobra.Command, svc *core.Service, key string) error {
 		d, err := svc.Issue(cmd.Context(), key)
 		if err != nil {
 			return err
@@ -71,7 +71,7 @@ func (a *App) addReadCommands(root *cobra.Command) {
 		return a.print(cmd, d, func() string { return render.Issue(d) })
 	})
 
-	comments := keyCmd(a, "comments <key>", "List a ticket's comments", func(cmd *cobra.Command, svc *core.Service, key string) error {
+	comments := a.ticketCmd("comments [key]", "List a ticket's comments", func(cmd *cobra.Command, svc *core.Service, key string) error {
 		max, _ := cmd.Flags().GetInt("max")
 		cs, err := svc.Comments(cmd.Context(), key, max)
 		if err != nil {
@@ -81,7 +81,7 @@ func (a *App) addReadCommands(root *cobra.Command) {
 	})
 	comments.Flags().Int("max", 50, "maximum number of comments")
 
-	history := keyCmd(a, "history <key>", "Show a ticket's change history", func(cmd *cobra.Command, svc *core.Service, key string) error {
+	history := a.ticketCmd("history [key]", "Show a ticket's change history", func(cmd *cobra.Command, svc *core.Service, key string) error {
 		if statusTimes, _ := cmd.Flags().GetBool("status-times"); statusTimes {
 			v, err := svc.StatusTimes(cmd.Context(), key)
 			if err != nil {
@@ -101,7 +101,7 @@ func (a *App) addReadCommands(root *cobra.Command) {
 	history.Flags().Int("max", 100, "maximum number of entries (newest kept)")
 	history.Flags().Bool("status-times", false, "show how long the ticket spent in each status instead")
 
-	worklogs := keyCmd(a, "worklogs <key>", "List work logged on a ticket", func(cmd *cobra.Command, svc *core.Service, key string) error {
+	worklogs := a.ticketCmd("worklogs [key]", "List work logged on a ticket", func(cmd *cobra.Command, svc *core.Service, key string) error {
 		ws, err := svc.Worklogs(cmd.Context(), key, 100)
 		if err != nil {
 			return err
@@ -109,7 +109,7 @@ func (a *App) addReadCommands(root *cobra.Command) {
 		return a.print(cmd, ws, func() string { return render.Worklogs(ws) })
 	})
 
-	transitions := keyCmd(a, "transitions <key>", "List the status changes available for a ticket", func(cmd *cobra.Command, svc *core.Service, key string) error {
+	transitions := a.ticketCmd("transitions [key]", "List the status changes available for a ticket", func(cmd *cobra.Command, svc *core.Service, key string) error {
 		ts, err := svc.Transitions(cmd.Context(), key)
 		if err != nil {
 			return err
@@ -117,7 +117,7 @@ func (a *App) addReadCommands(root *cobra.Command) {
 		return a.print(cmd, ts, func() string { return render.Transitions(ts) })
 	})
 
-	fields := keyCmd(a, "fields <key>", "List the fields you can change on a ticket", func(cmd *cobra.Command, svc *core.Service, key string) error {
+	fields := a.ticketCmd("fields [key]", "List the fields you can change on a ticket", func(cmd *cobra.Command, svc *core.Service, key string) error {
 		fs, err := svc.EditableFields(cmd.Context(), key)
 		if err != nil {
 			return err
@@ -215,7 +215,7 @@ func (a *App) addReadCommands(root *cobra.Command) {
 	})
 	backlog.Flags().Int("max", 50, "maximum number of tickets")
 
-	open := keyCmd(a, "open <key>", "Open a ticket in the browser", func(cmd *cobra.Command, svc *core.Service, key string) error {
+	open := a.ticketCmd("open [key]", "Open a ticket in the browser", func(cmd *cobra.Command, svc *core.Service, key string) error {
 		d, err := svc.Issue(cmd.Context(), key)
 		if err != nil {
 			return err
@@ -229,6 +229,28 @@ func (a *App) addReadCommands(root *cobra.Command) {
 	open.Flags().Bool("print", false, "print the URL instead of opening it")
 
 	root.AddCommand(mine, a.pickCmd(), search, show, open, comments, history, worklogs, transitions, fields, attachment, linkTypes, projects, types, whoami, boards, sprint, backlog)
+}
+
+// ticketCmd is a command on one ticket; without a key, the user chooses
+// one of their tickets.
+func (a *App) ticketCmd(use, short string, run func(*cobra.Command, *core.Service, string) error) *cobra.Command {
+	return &cobra.Command{
+		Use:               use,
+		Short:             short,
+		Args:              cobra.MaximumNArgs(1),
+		ValidArgsFunction: a.completeTickets,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, _, err := a.service(cmd)
+			if err != nil {
+				return err
+			}
+			key, err := a.ticket(cmd.Context(), svc, args, 0)
+			if err != nil {
+				return err
+			}
+			return run(cmd, svc, key)
+		},
+	}
 }
 
 func keyCmd(a *App, use, short string, run func(*cobra.Command, *core.Service, string) error) *cobra.Command {

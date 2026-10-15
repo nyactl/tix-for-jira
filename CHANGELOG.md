@@ -4,6 +4,16 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ## Unreleased
 
+### Added
+
+- Commands that take a ticket key let you choose one of your tickets when the key is left out, and `tix transition` lets you choose the status, in a picker you filter by typing (from approvekit).
+- Tab completion of ticket keys, with their summaries, and of a ticket's statuses.
+- People keep their labels across commands and MCP sessions of a profile, so `@[Person A]` mentions work for anyone shown before.
+
+### Changed
+
+- `tix pick` filters as you type; opening and commenting moved to Ctrl-O and Ctrl-T, and Esc quits.
+
 ## [0.3.0] - 2026-10-14
 
 ### Added

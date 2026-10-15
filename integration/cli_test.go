@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/nyactl/approvekit/keychain"
+	"github.com/nyactl/approvekit/picker"
 	"github.com/nyactl/tix-for-jira/internal/cli"
 )
 
@@ -22,17 +23,17 @@ type yes struct{ key, viewed string }
 func (*yes) Prompt(string) (string, error) { return "y", nil }
 func (*yes) Secret(string) (string, error) { return "", errors.New("no secrets in tests") }
 
-// Pick shows the line with key once, then quits.
-func (y *yes) Pick(_ string, lines []string, _ int, _ string) (int, cli.PickAction, error) {
+// Choose shows the line with key once, then quits.
+func (y *yes) Choose(opts picker.Options) (picker.Result, error) {
 	if y.viewed != "" {
-		return 0, cli.PickQuit, nil
+		return picker.Result{Index: -1}, picker.ErrCanceled
 	}
-	for i, l := range lines {
+	for i, l := range opts.Items {
 		if strings.HasPrefix(l, y.key+" ") {
-			return i, cli.PickShow, nil
+			return picker.Result{Index: i}, nil
 		}
 	}
-	return 0, cli.PickQuit, nil
+	return picker.Result{Index: -1}, picker.ErrCanceled
 }
 
 func (y *yes) View(_, text string) error {

@@ -15,7 +15,7 @@ You will get an acknowledgement within 7 days. Fixes are released before details
 Reports that break any of these are in scope:
 
 1. **Scope:** in privacy mode `own`, no ticket that is not assigned to the user reaches the output, beyond the key, type and status of related tickets.
-2. **Redaction:** in mode `own`, other people's account IDs, emails and display names from structured data never reach the output; display names and emails of people seen in structured data are also replaced in free text.
+2. **Redaction:** in mode `own`, other people's account IDs, emails and display names from structured data never reach the output; display names and emails of people seen in structured data are also replaced in free text. Labels are kept per profile in a local file readable only by the user, holding account IDs and labels, never names or emails; a label resolves back to a person only if tix showed that person before.
 3. **Consent:** no write happens without an approval given by the human, in the terminal (CLI) or in an elicitation dialog (MCP). Approvals are single-use, expire after 10 minutes and are bound to the exact change shown.
 4. **Containment:** the API token is only sent to the configured `https` site; redirects to another host or scheme are refused; the token is stored only in the macOS Keychain or, on Linux, the Secret Service.
 5. **Output safety:** terminal control sequences, bidirectional overrides and invisible characters from Jira are removed before output.

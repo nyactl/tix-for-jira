@@ -1,11 +1,14 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/nyactl/approvekit/picker"
 
 	"github.com/nyactl/tix-for-jira/internal/core"
 	"github.com/nyactl/tix-for-jira/internal/render"
@@ -14,10 +17,10 @@ import (
 func (a *App) pickCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "pick",
-		Short: "Browse your tickets with the arrow keys: show, open or comment on them until you quit",
+		Short: "Browse your tickets, typing to filter: show, open or comment on them until you quit",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			picker, ok := a.TTY.(Picker)
+			ch, ok := a.TTY.(Chooser)
 			if !ok {
 				return errNoTerminal
 			}
@@ -40,32 +43,32 @@ func (a *App) pickCmd() *cobra.Command {
 			for i, is := range list {
 				lines[i] = fmt.Sprintf("%-10s [%s] %s (%s)", is.Key, is.Status, is.Summary, is.Type)
 			}
-			title := "Your tickets on " + svc.Site()
-			cursor, status := 0, ""
+			opts := picker.Options{Title: "Your tickets on " + svc.Site(), Items: lines, Enter: "show",
+				Actions: []picker.Action{{Key: "ctrl-o", Name: "open in browser"}, {Key: "ctrl-t", Name: "comment"}}}
 			for {
-				i, action, err := picker.Pick(title, lines, cursor, status)
+				r, err := ch.Choose(opts)
+				if errors.Is(err, picker.ErrCanceled) {
+					return nil
+				}
 				if err != nil {
 					return err
 				}
-				if action == PickQuit {
-					return nil
-				}
-				cursor, status = i, ""
-				key := list[i].Key
-				switch action {
-				case PickShow:
+				opts.Cursor, opts.Query, opts.Status = r.Index, r.Query, ""
+				key := list[r.Index].Key
+				switch r.Action {
+				case "":
 					d, err := svc.Issue(cmd.Context(), key)
 					if err != nil {
-						status = key + ": " + err.Error()
+						opts.Status = key + ": " + err.Error()
 						continue
 					}
-					if err := picker.View(key+" "+d.Summary, render.Issue(d)); err != nil {
+					if err := ch.View(key+" "+d.Summary, render.Issue(d)); err != nil {
 						return err
 					}
-				case PickOpen:
-					status = a.pickOpen(cmd, svc, key)
-				case PickComment:
-					status = a.pickComment(cmd, svc, key)
+				case "ctrl-o":
+					opts.Status = a.pickOpen(cmd, svc, key)
+				case "ctrl-t":
+					opts.Status = a.pickComment(cmd, svc, key)
 				}
 			}
 		},
