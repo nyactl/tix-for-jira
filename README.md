@@ -107,6 +107,8 @@ tix sprint move PROJ-123 "Sprint 12"   # or: tix sprint move PROJ-123 backlog
 
 **Choosing instead of typing:** leave out the ticket key, as in `tix show`, `tix comment --body "…"` or `tix transition`, and a picker lists your open tickets: type part of the key or summary, move with the arrow keys, press Enter. `tix transition` without a status lets you choose one of the ticket's status changes the same way.
 
+![tix transition without arguments: choose the ticket, then the status, by typing part of them](docs/pick.gif)
+
 **Tab completion:** `tix completion zsh` (or `bash`, `fish`, `powershell`) prints a completion script; see `tix completion zsh --help` for how to load it. Ticket keys complete with their summaries and `tix transition KEY` with the ticket's statuses; with a plugin such as [fzf-tab](https://github.com/Aloxaf/fzf-tab), completions show in fzf.
 
 **Mentions:** `@[Person A]` mentions the person shown as Person A. Labels stay the same for a profile across commands and MCP sessions, kept in a file next to the profile's config that holds only account IDs and labels, so you can mention anyone tix has shown you before.

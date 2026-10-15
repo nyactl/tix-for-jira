@@ -4,6 +4,8 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ## Unreleased
 
+## [0.4.0] - 2026-10-16
+
 ### Added
 
 - Commands that take a ticket key let you choose one of your tickets when the key is left out, and `tix transition` lets you choose the status, in a picker you filter by typing (from approvekit).
@@ -73,6 +75,7 @@ First release, tested against Jira Cloud with a non-admin account.
 - Markdown <-> Atlassian Document Format conversion with `@[label]` mentions.
 - Profiles (`--profile`, `TIX_JIRA_PROFILE`) to switch between sites; development builds require an explicit profile.
 
+[0.4.0]: https://github.com/nyactl/tix-for-jira/releases/tag/v0.4.0
 [0.3.0]: https://github.com/nyactl/tix-for-jira/releases/tag/v0.3.0
 [0.2.0]: https://github.com/nyactl/tix-for-jira/releases/tag/v0.2.0
 [0.1.1]: https://github.com/nyactl/tix-for-jira/releases/tag/v0.1.1
