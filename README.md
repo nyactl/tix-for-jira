@@ -9,6 +9,8 @@
 
 For Confluence pages there is a companion tool, [dok-for-confluence](https://github.com/nyactl/dok-for-confluence), with the same approval and privacy model.
 
+![tix lists only your tickets, shows a colleague as Person A, and asks before each change](docs/demo.gif)
+
 > Not affiliated with or endorsed by Atlassian. Jira is a trademark of Atlassian.
 
 ## tix-for-jira or Atlassian's Rovo MCP server?
