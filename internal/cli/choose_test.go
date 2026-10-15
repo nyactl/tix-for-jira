@@ -19,7 +19,7 @@ func TestChooseTicketAndStatus(t *testing.T) {
 	}
 
 	e.tty.picks = []pickChoice{{"PROJ-1", ""}, {"In Progress", ""}}
-	e.tty.answers = []string{"PROJ-1"}
+	e.tty.answers = []string{"y"}
 	if _, _, err := e.run(t, "transition"); err != nil {
 		t.Fatal(err)
 	}

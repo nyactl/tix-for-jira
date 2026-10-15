@@ -36,7 +36,7 @@ func (a *App) confirmAndApply(cmd *cobra.Command, svc *core.Service, plan *core.
 		return "", err
 	}
 	desc := target(svc.Site(), prof) + "\n\n" + render.Plan(plan)
-	if err := confirm(a.TTY, desc, plan.Key, plan.Kind == core.Destructive); err != nil {
+	if err := confirm(a.TTY, desc); err != nil {
 		return "", err
 	}
 	msg, err := plan.Apply(cmd.Context())
@@ -96,7 +96,7 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 
 	update := &cobra.Command{
 		Use:   "update [key]",
-		Short: "Change fields; you confirm by typing the ticket key",
+		Short: "Change fields of a ticket",
 		Example: `  tix update PROJ-1 --set "Summary=New title" --set "Labels=auth,urgent"
   tix update PROJ-1 --set "Description=$(cat notes.md)"`,
 		Args:              cobra.MaximumNArgs(1),
@@ -124,7 +124,7 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 
 	transition := &cobra.Command{
 		Use:               "transition [key] [status or transition]",
-		Short:             "Change the status; you confirm by typing the ticket key",
+		Short:             "Change the status of a ticket",
 		Long:              "Change a ticket's status. Without a key you choose the ticket, and without a status one of its possible status changes.",
 		Args:              cobra.MaximumNArgs(2),
 		ValidArgsFunction: a.completeTransition,
