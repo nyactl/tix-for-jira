@@ -23,7 +23,7 @@ Atlassian offers its own hosted [Rovo MCP server](https://developer.atlassian.co
 | Other people | "Person A", "Person B"; no names, emails or account IDs | as stored in Jira |
 | Writes | each one approved by you in a dialog the assistant cannot answer, single-use and bound to the shown change | as your AI client handles tool calls |
 | Runs | locally; the token stays in your system keychain | hosted by Atlassian, OAuth or API token |
-| Covers | Jira | Jira, Confluence, Jira Service Management, Bitbucket, Loom and more, with semantic search |
+| Covers | Jira; for Confluence pages, its companion [dok-for-confluence](https://github.com/nyactl/dok-for-confluence) works the same way | Jira, Confluence, Jira Service Management, Bitbucket, Loom and more, with semantic search |
 | Cost | free, open source | some tools use Rovo credits |
 
 Use tix-for-jira when colleagues' data must not reach the assistant, or when nothing should change in Jira without your explicit approval. Use Rovo for broad research across Atlassian apps where that is acceptable.
