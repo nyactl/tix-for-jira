@@ -250,16 +250,22 @@ func TestCommentNeedsYes(t *testing.T) {
 	}
 }
 
-func TestTransitionNeedsTypedKey(t *testing.T) {
+// Every change asks y/N; anything but y, including just Enter, cancels.
+func TestConfirmationDefaultsToNo(t *testing.T) {
 	e := newEnv(t).loggedIn(t)
-	e.tty.answers = []string{"y"}
-	if _, _, err := e.run(t, "transition", "PROJ-1", "Done"); err == nil {
-		t.Fatal("destructive change accepted with y")
+	for _, answer := range []string{"", "n", "PROJ-1", "yep"} {
+		e.tty.answers = []string{answer}
+		if _, _, err := e.run(t, "transition", "PROJ-1", "Done"); err == nil || !strings.Contains(err.Error(), "not confirmed") {
+			t.Fatalf("%q confirmed: %v", answer, err)
+		}
 	}
 	if e.fake.Issues["PROJ-1"].Status != "To Do" {
 		t.Fatal("status changed")
 	}
-	e.tty.answers = []string{"proj-1"}
+	if !strings.HasSuffix(e.tty.asked[len(e.tty.asked)-1], "Apply this change? [y/N] ") {
+		t.Errorf("prompt %q", e.tty.asked[len(e.tty.asked)-1])
+	}
+	e.tty.answers = []string{"Y"}
 	if _, _, err := e.run(t, "transition", "PROJ-1", "Done"); err != nil {
 		t.Fatal(err)
 	}
@@ -295,7 +301,7 @@ func TestWritesWithoutTerminalChangeNothing(t *testing.T) {
 
 func TestUpdateParsesSets(t *testing.T) {
 	e := newEnv(t).loggedIn(t)
-	e.tty.answers = []string{"PROJ-1"}
+	e.tty.answers = []string{"y"}
 	if _, _, err := e.run(t, "update", "PROJ-1", "--set", "Summary=New = title", "--set", "Labels=a,b"); err != nil {
 		t.Fatal(err)
 	}

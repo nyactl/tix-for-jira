@@ -115,7 +115,7 @@ tix sprint move PROJ-123 "Sprint 12"   # or: tix sprint move PROJ-123 backlog
 
 Add `--json` to any read command for machine-readable output. `tix help <command>` explains every option.
 
-**Confirmation:** each write shows exactly what will change. Additive changes (comment, create, log work, link) ask `y/N`; destructive ones (field updates, transitions) ask you to type the ticket key. The answer is read from the terminal device, not from stdin, so scripts, pipes and assistants running the command cannot confirm for you. There is no `--yes`.
+**Confirmation:** each write shows exactly what will change. Every change asks `Apply this change? [y/N]`; only `y` applies it, and just pressing Enter cancels. The answer is read from the terminal device, not from stdin, so scripts, pipes and assistants running the command cannot confirm for you. There is no `--yes`.
 
 ## Use with an MCP client
 

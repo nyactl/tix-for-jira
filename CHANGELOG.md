@@ -4,6 +4,12 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ## Unreleased
 
+## [0.4.1] - 2026-10-16
+
+### Changed
+
+- Every change asks `Apply this change? [y/N]`, the same in all commands: only `y` applies it, and just pressing Enter cancels. Updates, transitions and publishing no longer ask you to type the ticket key or page ID.
+
 ## [0.4.0] - 2026-10-16
 
 ### Added
@@ -75,6 +81,7 @@ First release, tested against Jira Cloud with a non-admin account.
 - Markdown <-> Atlassian Document Format conversion with `@[label]` mentions.
 - Profiles (`--profile`, `TIX_JIRA_PROFILE`) to switch between sites; development builds require an explicit profile.
 
+[0.4.1]: https://github.com/nyactl/tix-for-jira/releases/tag/v0.4.1
 [0.4.0]: https://github.com/nyactl/tix-for-jira/releases/tag/v0.4.0
 [0.3.0]: https://github.com/nyactl/tix-for-jira/releases/tag/v0.3.0
 [0.2.0]: https://github.com/nyactl/tix-for-jira/releases/tag/v0.2.0
