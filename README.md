@@ -11,6 +11,21 @@ For Confluence pages there is a companion tool, [dok-for-confluence](https://git
 
 > Not affiliated with or endorsed by Atlassian. Jira is a trademark of Atlassian.
 
+## tix-for-jira or Atlassian's Rovo MCP server?
+
+Atlassian offers its own hosted [Rovo MCP server](https://developer.atlassian.com/cloud/rovo-mcp/) for Jira, Confluence and other Atlassian apps. It is the broader tool; tix-for-jira is the narrower, stricter one. Both can be used side by side.
+
+| | tix-for-jira | Rovo MCP server |
+|---|---|---|
+| What the assistant sees | tickets assigned to you (or, if you switch privacy off, what your account sees) | everything your account can see |
+| Other people | "Person A", "Person B"; no names, emails or account IDs | as stored in Jira |
+| Writes | each one approved by you in a dialog the assistant cannot answer, single-use and bound to the shown change | as your AI client handles tool calls |
+| Runs | locally; the token stays in your system keychain | hosted by Atlassian, OAuth or API token |
+| Covers | Jira | Jira, Confluence, Jira Service Management, Bitbucket, Loom and more, with semantic search |
+| Cost | free, open source | some tools use Rovo credits |
+
+Use tix-for-jira when colleagues' data must not reach the assistant, or when nothing should change in Jira without your explicit approval. Use Rovo for broad research across Atlassian apps where that is acceptable.
+
 ## Install
 
 Runs on macOS and Linux. With Homebrew:
