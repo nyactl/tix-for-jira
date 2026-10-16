@@ -125,22 +125,24 @@ func (s *Service) PlanUpdate(ctx context.Context, key string, changes []FieldInp
 			if _, dup := fields["parent"]; dup {
 				return nil, errors.New("the parent is listed twice")
 			}
-			if strings.TrimSpace(ch.Value) == "" {
-				return nil, errors.New("removing the parent is not supported; move the ticket under another parent instead")
+			old := ""
+			if issue.Fields.Parent != nil {
+				old = describeRelated(s.related("parent", issue.Fields.Parent))
 			}
-			parent, err := s.scoped(ctx, ch.Value)
+			if strings.TrimSpace(ch.Value) == "" {
+				if old == "" {
+					return nil, fmt.Errorf("%s has no parent", issue.Key)
+				}
+				fields["parent"] = nil
+				lines = append(lines, fmt.Sprintf("- Parent:\n    from: %s\n    to:   %s", describe(old), describe("")))
+				continue
+			}
+			parent, desc, err := s.parentFor(ctx, ch.Value, issue.Key)
 			if err != nil {
 				return nil, fmt.Errorf("parent %s: %w", ch.Value, err)
 			}
-			if parent.Key == issue.Key {
-				return nil, errors.New("a ticket cannot be its own parent")
-			}
 			fields["parent"] = map[string]string{"key": parent.Key}
-			old := ""
-			if issue.Fields.Parent != nil {
-				old = issue.Fields.Parent.Key
-			}
-			lines = append(lines, fmt.Sprintf("- Parent:\n    from: %s\n    to:   %s", describe(old), describe(s.people.Text(headline(parent)))))
+			lines = append(lines, fmt.Sprintf("- Parent:\n    from: %s\n    to:   %s", describe(old), describe(desc)))
 			continue
 		}
 		if sub, label, ok := estimateField(ch.Field); ok {
@@ -337,12 +339,15 @@ func (s *Service) PlanCreate(ctx context.Context, in CreateInput) (*Plan, error)
 		if in.Parent == "" {
 			return nil, fmt.Errorf("a %s needs a parent ticket", typ.Name)
 		}
-		parent, err := s.scoped(ctx, in.Parent)
+		parent, desc, err := s.parentFor(ctx, in.Parent, "")
 		if err != nil {
 			return nil, fmt.Errorf("parent %s: %w", in.Parent, err)
 		}
+		if typ.Subtask && aboveStandard(parent.Fields.IssueType) {
+			return nil, fmt.Errorf("a %s goes under a standard ticket, not under %s", typ.Name, parent.Key)
+		}
 		fields["parent"] = map[string]string{"key": parent.Key}
-		lines = append(lines, "- Parent: "+s.people.Text(headline(parent)))
+		lines = append(lines, "- Parent: "+desc)
 	}
 	set := func(id, label, value string) error {
 		m, ok := meta[id]

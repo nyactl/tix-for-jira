@@ -32,6 +32,8 @@ type Service struct {
 	people *people.People
 	now    func() time.Time
 
+	epicSummaries bool
+
 	fieldsMu sync.Mutex
 	fields   map[string]jira.Field // field ID -> definition
 }

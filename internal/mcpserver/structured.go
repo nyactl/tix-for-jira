@@ -49,6 +49,10 @@ type projectsOut struct {
 	Projects []core.ProjectView `json:"projects"`
 }
 
+type epicsOut struct {
+	Epics []core.Related `json:"epics"`
+}
+
 type issueTypesOut struct {
 	IssueTypes []core.IssueTypeView `json:"issueTypes"`
 }
@@ -156,6 +160,10 @@ func fillLists[T any](v T) T {
 	case *projectsOut:
 		if w != nil && w.Projects == nil {
 			w.Projects = []core.ProjectView{}
+		}
+	case *epicsOut:
+		if w != nil && w.Epics == nil {
+			w.Epics = []core.Related{}
 		}
 	case *issueTypesOut:
 		if w != nil && w.IssueTypes == nil {

@@ -54,8 +54,14 @@ func setupOther(t *testing.T, s *site) *otherPerson {
 	return o
 }
 
-// createOwned creates a ticket as the other person and assigns it to them.
+// createOwned creates a task as the other person and assigns it to them.
 func (o *otherPerson) createOwned(t *testing.T, project, summary string) string {
+	t.Helper()
+	return o.createOwnedType(t, project, summary, func(it jira.IssueType) bool { return it.Name == "Task" })
+}
+
+// createOwnedType creates a ticket of the first type that is wanted.
+func (o *otherPerson) createOwnedType(t *testing.T, project, summary string, wanted func(jira.IssueType) bool) string {
 	t.Helper()
 	ctx := context.Background()
 	types, err := o.jc.CreatableIssueTypes(ctx, project)
@@ -64,12 +70,12 @@ func (o *otherPerson) createOwned(t *testing.T, project, summary string) string 
 	}
 	var taskID string
 	for _, it := range types {
-		if it.Name == "Task" {
+		if taskID == "" && wanted(it) {
 			taskID = it.ID
 		}
 	}
 	if taskID == "" {
-		t.Fatalf("no Task type in %s", project)
+		t.Fatalf("no wanted issue type in %s", project)
 	}
 	key, err := o.jc.CreateIssue(ctx, map[string]any{
 		"project":   map[string]string{"key": project},

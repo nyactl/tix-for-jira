@@ -251,7 +251,7 @@ func (s *Service) related(relation string, r *jira.RelatedIssue) Related {
 	if r.Fields.Status != nil {
 		v.Status = r.Fields.Status.Name
 	}
-	if s.people.Mode() == people.Off {
+	if s.people.Mode() == people.Off || (s.epicSummaries && aboveStandard(r.Fields.IssueType)) {
 		v.Summary = s.people.Text(r.Fields.Summary)
 	}
 	return v
@@ -511,7 +511,7 @@ func (s *Service) EditableFields(ctx context.Context, key string) ([]EditableFie
 	var out []EditableField
 	for id, m := range meta {
 		if id == "parent" && contains(m.Operations, "set") {
-			out = append(out, EditableField{ID: "parent", Name: m.Name, Type: "ticket key (must be one of your tickets)"})
+			out = append(out, EditableField{ID: "parent", Name: m.Name, Type: "ticket key: one of your tickets or an epic; empty removes the parent"})
 			continue
 		}
 		if id == "timetracking" {

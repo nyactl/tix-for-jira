@@ -294,6 +294,15 @@ func IssueTypes(ts []core.IssueTypeView) string {
 	return done(&b)
 }
 
+// Epics renders epics and other tickets above standard tickets.
+func Epics(es []core.Related) string {
+	var b strings.Builder
+	for _, e := range es {
+		line(&b, "- %s", strings.TrimPrefix(related(e), e.Relation+" "))
+	}
+	return done(&b)
+}
+
 // Me renders the current user and settings.
 func Me(m *core.Me) string {
 	var b strings.Builder

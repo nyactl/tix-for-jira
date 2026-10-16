@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -168,6 +169,31 @@ func (a *App) addReadCommands(root *cobra.Command) {
 		return a.print(cmd, ts, func() string { return render.IssueTypes(ts) })
 	})
 
+	epics := &cobra.Command{
+		Use:   "epics",
+		Short: "List the open epics of a project, to put tickets under with `tix parent`",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			svc, cfg, err := a.service(cmd)
+			if err != nil {
+				return err
+			}
+			project, _ := cmd.Flags().GetString("project")
+			if project == "" {
+				project = cfg.DefaultProject
+			}
+			if project == "" {
+				return errors.New("name the project with --project, or set a default with `tix config project KEY`")
+			}
+			es, err := svc.Epics(cmd.Context(), project, 200)
+			if err != nil {
+				return err
+			}
+			return a.print(cmd, es, func() string { return render.Epics(es) })
+		},
+	}
+	epics.Flags().String("project", "", "project key (default: the profile's default project)")
+
 	whoami := noArgCmd(a, "whoami", "Show your account, site and privacy mode", func(cmd *cobra.Command, svc *core.Service) error {
 		me, err := svc.Whoami(cmd.Context())
 		if err != nil {
@@ -228,7 +254,7 @@ func (a *App) addReadCommands(root *cobra.Command) {
 	})
 	open.Flags().Bool("print", false, "print the URL instead of opening it")
 
-	root.AddCommand(mine, a.pickCmd(), search, show, open, comments, history, worklogs, transitions, fields, attachment, linkTypes, projects, types, whoami, boards, sprint, backlog)
+	root.AddCommand(mine, a.pickCmd(), search, show, open, comments, history, worklogs, transitions, fields, attachment, linkTypes, projects, types, epics, whoami, boards, sprint, backlog)
 }
 
 // ticketCmd is a command on one ticket; without a key, the user chooses

@@ -117,10 +117,21 @@ var transitions = []struct{ id, name, to string }{
 var issueTypes = []struct {
 	id, name string
 	subtask  bool
+	level    int
 }{
-	{"10001", "Task", false},
-	{"10002", "Bug", false},
-	{"10003", "Subtask", true},
+	{"10001", "Task", false, 0},
+	{"10002", "Bug", false, 0},
+	{"10003", "Subtask", true, -1},
+	{"10004", "Epic", false, 1},
+}
+
+func typeJSON(name string) map[string]any {
+	for _, t := range issueTypes {
+		if t.name == name {
+			return map[string]any{"id": t.id, "name": t.name, "subtask": t.subtask, "hierarchyLevel": t.level}
+		}
+	}
+	return map[string]any{"name": name}
 }
 
 var linkTypes = []struct{ id, name, outward, inward string }{
@@ -340,6 +351,12 @@ func (f *Fake) serve(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"issueLinkTypes": out})
 	case p == "/rest/api/3/issueLink" && r.Method == http.MethodPost:
 		f.createLink(w, body)
+	case p == "/rest/api/3/project/PROJ":
+		var types []any
+		for _, t := range issueTypes {
+			types = append(types, typeJSON(t.name))
+		}
+		writeJSON(w, 200, map[string]any{"id": "1", "key": "PROJ", "name": "Project", "issueTypes": types})
 	case p == "/rest/api/3/project/search":
 		writeJSON(w, 200, map[string]any{"values": []any{map[string]string{"id": "1", "key": "PROJ", "name": "Project"}}, "total": 1, "isLast": true})
 	case p == "/rest/api/3/issue" && r.Method == http.MethodPost:
@@ -376,6 +393,12 @@ func (f *Fake) search(w http.ResponseWriter, r *http.Request, me *User) {
 		if m := regexp.MustCompile(`project = "?([A-Z0-9_]+)"?`).FindStringSubmatch(jql); m != nil && i.Project != m[1] {
 			continue
 		}
+		if m := regexp.MustCompile(`issuetype in \(([0-9, ]+)\)`).FindStringSubmatch(jql); m != nil {
+			id, _ := typeJSON(i.Type)["id"].(string)
+			if !slices.Contains(strings.Split(strings.ReplaceAll(m[1], " ", ""), ","), id) {
+				continue
+			}
+		}
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
@@ -405,7 +428,7 @@ func (f *Fake) related(key string) any {
 	return map[string]any{"id": "1" + strings.Split(key, "-")[1], "key": key, "fields": map[string]any{
 		"summary":   i.Summary,
 		"status":    map[string]any{"name": i.Status, "statusCategory": map[string]string{"key": st.cat}},
-		"issuetype": map[string]any{"name": i.Type},
+		"issuetype": typeJSON(i.Type),
 	}}
 }
 
@@ -414,7 +437,7 @@ func (f *Fake) issueJSON(i *Issue, names bool, me *User) map[string]any {
 	fields := map[string]any{
 		"summary":     i.Summary,
 		"status":      map[string]any{"id": st.id, "name": i.Status, "statusCategory": map[string]string{"key": st.cat, "name": i.Status}},
-		"issuetype":   map[string]any{"name": i.Type, "subtask": i.Type == "Subtask"},
+		"issuetype":   typeJSON(i.Type),
 		"project":     map[string]any{"key": i.Project, "name": "Project " + i.Project},
 		"assignee":    f.userJSON(i.Assignee),
 		"reporter":    f.userJSON(i.Reporter),
@@ -679,6 +702,10 @@ func (f *Fake) edit(w http.ResponseWriter, i *Issue, body map[string]any) {
 		case "priority":
 			i.Priority, _ = v.(map[string]any)["name"].(string)
 		case "parent":
+			if v == nil {
+				i.Parent = ""
+				continue
+			}
 			key, _ := v.(map[string]any)["key"].(string)
 			if f.Issues[key] == nil {
 				errJSON(w, 400, "Parent issue not found")
@@ -759,7 +786,7 @@ func (f *Fake) createMeta(w http.ResponseWriter, m []string) {
 	if m[2] == "" {
 		var types []any
 		for _, t := range issueTypes {
-			types = append(types, map[string]any{"id": t.id, "name": t.name, "subtask": t.subtask})
+			types = append(types, typeJSON(t.name))
 		}
 		writeJSON(w, 200, map[string]any{"issueTypes": types, "total": len(types), "startAt": 0, "maxResults": 50})
 		return

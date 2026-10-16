@@ -4,6 +4,13 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ## Unreleased
 
+### Added
+
+- Put your tickets under epics that belong to someone else: `tix parent KEY EPIC`, `tix update KEY --set Parent=EPIC` and `tix create --parent EPIC`. Such epics show only key, type and status.
+- `tix parent` without an epic, and Tab completion for it and `tix create --parent`, offer the project's open epics; `tix parent KEY --remove` (or `--set Parent=`) takes a ticket out of its epic.
+- `tix epics` and the MCP tool `list_epics` list a project's open epics.
+- `tix config epic-summaries on` also shows the summaries of other people's epics.
+
 ## [0.4.1] - 2026-10-16
 
 ### Changed
