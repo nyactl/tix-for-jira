@@ -119,7 +119,7 @@ func TestReadOnlyByDefault(t *testing.T) {
 			t.Errorf("%s is not marked read-only", name)
 		}
 	}
-	if len(tools) != 19 {
+	if len(tools) != 20 {
 		t.Errorf("got %d read tools", len(tools))
 	}
 	if instr := h.session.InitializeResult().Instructions; !strings.Contains(instr, "read-only") || !strings.Contains(instr, "Person A") {
@@ -350,7 +350,7 @@ func TestStructuredContentMatchesSchemas(t *testing.T) {
 		"whoami": {}, "my_issues": {}, "search_issues": {"jql": "@all"}, "list_saved_searches": {},
 		"get_issue": {"key": "PROJ-9"}, "list_comments": {"key": "PROJ-1"}, "get_history": {"key": "PROJ-1"},
 		"get_status_times": {"key": "PROJ-1"}, "list_worklogs": {"key": "PROJ-1"}, "list_transitions": {"key": "PROJ-1"},
-		"list_editable_fields": {"key": "PROJ-1"}, "list_link_types": {}, "list_projects": {}, "list_issue_types": {"project": "PROJ"},
+		"list_editable_fields": {"key": "PROJ-1"}, "list_link_types": {}, "list_projects": {}, "list_issue_types": {"project": "PROJ"}, "list_epics": {"project": "PROJ"},
 		"list_boards": {}, "list_sprints": {"board": "1"}, "get_active_sprint": {"board": "1"}, "get_backlog": {"board": "1"},
 	}
 	for name, tool := range tools {

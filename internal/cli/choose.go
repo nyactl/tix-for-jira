@@ -107,6 +107,92 @@ func (a *App) status(ctx context.Context, svc *core.Service, key string, args []
 	return ts[k].Name, nil
 }
 
+func epicLine(e core.Related) string {
+	line := fmt.Sprintf("%-10s [%s]", e.Key, e.Status)
+	if e.Summary != "" {
+		line += " " + e.Summary
+	}
+	return line
+}
+
+// projectOf returns the project part of a ticket key.
+func projectOf(key string) string {
+	p, _, _ := strings.Cut(strings.ToUpper(strings.TrimSpace(key)), "-")
+	return p
+}
+
+// epic returns the epic key in args at i, or lets the user choose one of
+// the open epics of project.
+func (a *App) epic(ctx context.Context, svc *core.Service, project string, args []string, i int) (string, error) {
+	if len(args) > i {
+		return args[i], nil
+	}
+	es, err := svc.Epics(ctx, project, 200)
+	if err != nil {
+		return "", err
+	}
+	if len(es) == 0 {
+		return "", fmt.Errorf("%s has no open epics", project)
+	}
+	lines := make([]string, len(es))
+	for k, e := range es {
+		lines[k] = epicLine(e)
+	}
+	k, err := a.choose(picker.Options{Title: "Choose an epic in " + project, Items: lines})
+	if errors.Is(err, errNoTerminal) {
+		return "", errors.New("give the epic key, or run this in a terminal to choose one")
+	}
+	if err != nil {
+		return "", err
+	}
+	return es[k].Key, nil
+}
+
+func (a *App) completeEpics(cmd *cobra.Command, project, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
+	svc, _, err := a.service(cmd)
+	if err != nil || project == "" {
+		return nil, cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveError
+	}
+	es, err := svc.Epics(cmd.Context(), project, 200)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveError
+	}
+	var out []cobra.Completion
+	for _, e := range es {
+		if strings.HasPrefix(strings.ToUpper(e.Key), strings.ToUpper(toComplete)) {
+			out = append(out, cobra.CompletionWithDesc(e.Key, oneLine(strings.TrimSpace(e.Status+" "+e.Summary))))
+		}
+	}
+	return out, cobra.ShellCompDirectiveNoFileComp
+}
+
+// completeParent completes a ticket key, then the epics of its project.
+func (a *App) completeParent(cmd *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
+	switch len(args) {
+	case 0:
+		return a.completeTickets(cmd, args, toComplete)
+	case 1:
+		project, _ := cmd.Flags().GetString("project")
+		if project == "" {
+			project = projectOf(args[0])
+		}
+		return a.completeEpics(cmd, project, toComplete)
+	}
+	return nil, cobra.ShellCompDirectiveNoFileComp
+}
+
+// completeCreateParent completes --parent of tix create with the epics of
+// the project being created in.
+func (a *App) completeCreateParent(cmd *cobra.Command, _ []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
+	project, _ := cmd.Flags().GetString("project")
+	if project == "" {
+		if _, cfg, err := a.service(cmd); err == nil {
+			project = cfg.DefaultProject
+		}
+	}
+	return a.completeEpics(cmd, project, toComplete)
+}
+
 // completeTickets completes ticket keys with the user's open tickets and
 // their summaries.
 func (a *App) completeTickets(cmd *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {

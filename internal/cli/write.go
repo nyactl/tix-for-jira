@@ -199,7 +199,49 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 	create.Flags().String("description", "", "description in Markdown, or - for stdin")
 	create.Flags().StringSlice("label", nil, "label (repeatable)")
 	create.Flags().String("priority", "", "priority name")
-	create.Flags().String("parent", "", "parent ticket key (for subtasks)")
+	create.Flags().String("parent", "", "parent ticket: an epic, or one of your tickets for a subtask")
+	_ = create.RegisterFlagCompletionFunc("parent", a.completeCreateParent)
+
+	parent := &cobra.Command{
+		Use:   "parent [key] [epic]",
+		Short: "Put a ticket under an epic, or take it out with --remove",
+		Long: "Put one of your tickets under an epic. The epic may belong to someone else; tix shows only its key, type and\n" +
+			"status, and its summary if `tix config epic-summaries on` allows it. Without a key you choose the ticket, and\n" +
+			"without an epic one of the open epics of the ticket's project (or of --project).",
+		Example: `  tix parent PROJ-12 PROJ-3
+  tix parent PROJ-12
+  tix parent PROJ-12 --remove`,
+		Args:              cobra.MaximumNArgs(2),
+		ValidArgsFunction: a.completeParent,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			remove, _ := cmd.Flags().GetBool("remove")
+			if remove && len(args) > 1 {
+				return errors.New("--remove takes only the ticket")
+			}
+			svc, _, err := a.service(cmd)
+			if err != nil {
+				return err
+			}
+			key, err := a.ticket(cmd.Context(), svc, args, 0)
+			if err != nil {
+				return err
+			}
+			epic := ""
+			if !remove {
+				project, _ := cmd.Flags().GetString("project")
+				if project == "" {
+					project = projectOf(key)
+				}
+				if epic, err = a.epic(cmd.Context(), svc, project, args, 1); err != nil {
+					return err
+				}
+			}
+			p, err := svc.PlanUpdate(cmd.Context(), key, []core.FieldInput{{Field: "parent", Value: epic}})
+			return a.apply(cmd, svc, p, err)
+		},
+	}
+	parent.Flags().Bool("remove", false, "take the ticket out of its epic or parent")
+	parent.Flags().String("project", "", "choose the epic from this project instead of the ticket's")
 	create.Flags().StringArray("set", nil, `other field "Name=value" (repeatable)`)
 	_ = create.MarkFlagRequired("summary")
 
@@ -309,7 +351,7 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 	for _, c := range []*cobra.Command{logWork, link, weblink, attach} {
 		c.ValidArgsFunction = a.completeTickets
 	}
-	root.AddCommand(comment, update, transition, create, logWork, link, weblink, take, attach,
+	root.AddCommand(comment, update, transition, create, parent, logWork, link, weblink, take, attach,
 		watchCmd("watch", "Watch a ticket to get its notifications", true),
 		watchCmd("unwatch", "Stop watching a ticket", false))
 }

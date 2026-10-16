@@ -186,6 +186,7 @@ func (a *App) service(cmd *cobra.Command) (*core.Service, *config.Config, error)
 	if err != nil {
 		return nil, nil, err
 	}
+	svc.ShowEpicSummaries(cfg.EpicSummaries)
 	if path, err := config.Path(prof); err == nil {
 		svc.KeepLabels(people.NewFileStore(strings.TrimSuffix(path, ".json") + ".labels.json"))
 	}

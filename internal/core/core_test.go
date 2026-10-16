@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -415,7 +416,7 @@ func TestPlanCreate(t *testing.T) {
 	}{
 		{CreateInput{Project: "PROJ", Type: "Subtask", Summary: "x"}, "needs a parent"},
 		{CreateInput{Project: "PROJ", Type: "Subtask", Summary: "x", Parent: "PROJ-2"}, "outside your privacy scope"},
-		{CreateInput{Project: "PROJ", Type: "Epic", Summary: "x"}, "choose one of: Task, Bug, Subtask"},
+		{CreateInput{Project: "PROJ", Type: "Initiative", Summary: "x"}, "choose one of: Task, Bug, Subtask, Epic"},
 		{CreateInput{Project: "PROJ", Type: "Task", Summary: "two\nlines"}, "single non-empty line"},
 		{CreateInput{Project: "PROJ", Type: "Task", Summary: "x", Fields: map[string]string{"Story Points": "3"}}, "not on the create screen"},
 	} {
@@ -579,7 +580,6 @@ func TestPlanUpdateParent(t *testing.T) {
 	}{
 		{"PROJ-2", "outside your privacy scope"},
 		{"PROJ-3", "its own parent"},
-		{"", "not supported"},
 		{"nope", "invalid issue key"},
 	} {
 		_, err := s.PlanUpdate(ctx, "PROJ-3", []FieldInput{{"parent", tc.value}})
@@ -979,5 +979,87 @@ func TestFormatDuration(t *testing.T) {
 		if got := formatDuration(secs); got != want {
 			t.Errorf("%d: %q, want %q", secs, got, want)
 		}
+	}
+}
+
+func TestEpicParent(t *testing.T) {
+	t.Parallel()
+	f := fixture(t)
+	f.AddIssue(jiratest.Issue{Key: "PROJ-10", Type: "Epic", Summary: "Checkout redesign", Assignee: "acc-alice", Reporter: "acc-alice",
+		Description: jiratest.Doc("secret plans")})
+	f.AddIssue(jiratest.Issue{Key: "PROJ-11", Type: "Epic", Summary: "Old epic", Assignee: "acc-alice", Status: "Done"})
+	f.AddIssue(jiratest.Issue{Key: "PROJ-12", Type: "Epic", Summary: "My epic", Assignee: "acc-me"})
+	s := service(t, f, config.PrivacyOwn)
+	ctx := context.Background()
+
+	p, err := s.PlanUpdate(ctx, "PROJ-3", []FieldInput{{"Parent", "PROJ-10"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(p.Description, `to:   "PROJ-10 (Epic, To Do)"`) || strings.Contains(p.Description, "Checkout") {
+		t.Errorf("description:\n%s", p.Description)
+	}
+	assertNoPersonalData(t, p.Description)
+	if _, err := p.Apply(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if f.Issues["PROJ-3"].Parent != "PROJ-10" {
+		t.Fatalf("parent = %q", f.Issues["PROJ-3"].Parent)
+	}
+
+	// Someone else's standard ticket is still out of scope.
+	if _, err := s.PlanUpdate(ctx, "PROJ-3", []FieldInput{{"Parent", "PROJ-2"}}); !errors.Is(err, ErrNotFound) {
+		t.Errorf("standard parent of someone else: %v", err)
+	}
+	if _, err := s.PlanCreate(ctx, CreateInput{Project: "PROJ", Type: "Subtask", Summary: "x", Parent: "PROJ-10"}); err == nil || !strings.Contains(err.Error(), "standard ticket") {
+		t.Errorf("subtask under an epic: %v", err)
+	}
+	c, err := s.PlanCreate(ctx, CreateInput{Project: "PROJ", Type: "Task", Summary: "x", Parent: "PROJ-10"})
+	if err != nil || !strings.Contains(c.Description, "- Parent: PROJ-10 (Epic, To Do)") {
+		t.Errorf("create under an epic: %v\n%v", err, c)
+	}
+
+	// Removing the parent.
+	p, err = s.PlanUpdate(ctx, "PROJ-3", []FieldInput{{"parent", " "}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(p.Description, `from: "PROJ-10 (Epic, To Do)"`) || !strings.Contains(p.Description, "to:   (empty)") {
+		t.Errorf("description:\n%s", p.Description)
+	}
+	if _, err := p.Apply(ctx); err != nil || f.Issues["PROJ-3"].Parent != "" {
+		t.Fatalf("remove: %v, parent %q", err, f.Issues["PROJ-3"].Parent)
+	}
+	if _, err := s.PlanUpdate(ctx, "PROJ-3", []FieldInput{{"parent", ""}}); err == nil || !strings.Contains(err.Error(), "has no parent") {
+		t.Errorf("remove without parent: %v", err)
+	}
+
+	epics, err := s.Epics(ctx, "proj", 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Related{{Relation: "epic", Key: "PROJ-10", Type: "Epic", Status: "To Do"}, {Relation: "epic", Key: "PROJ-12", Type: "Epic", Status: "To Do", Summary: "My epic"}}
+	if !reflect.DeepEqual(epics, want) {
+		t.Errorf("epics = %+v", epics)
+	}
+	assertNoPersonalData(t, epics)
+
+	// With summaries allowed, epics show them, also as parents.
+	s.ShowEpicSummaries(true)
+	epics, _ = s.Epics(ctx, "PROJ", 50)
+	if len(epics) != 2 || epics[0].Summary != "Checkout redesign" {
+		t.Errorf("epics with summaries = %+v", epics)
+	}
+	f.Issues["PROJ-3"].Parent = "PROJ-10"
+	d, err := s.Issue(ctx, "PROJ-3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Parent == nil || d.Parent.Summary != "Checkout redesign" {
+		t.Errorf("parent = %+v", d.Parent)
+	}
+	p, _ = s.PlanUpdate(ctx, "PROJ-1", []FieldInput{{"Parent", "PROJ-10"}})
+	if p == nil || !strings.Contains(p.Description, `"PROJ-10 (Epic, To Do) Checkout redesign"`) {
+		t.Errorf("plan with summary: %v", p)
 	}
 }

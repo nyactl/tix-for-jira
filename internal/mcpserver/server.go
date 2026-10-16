@@ -129,6 +129,11 @@ type projectInput struct {
 	Project string `json:"project" jsonschema:"Project key"`
 }
 
+type projectMaxInput struct {
+	Project string `json:"project,omitempty" jsonschema:"Project key; defaults to the user's default project"`
+	Max     int    `json:"max,omitempty" jsonschema:"Maximum number of epics (default 50)"`
+}
+
 type webLinkInput struct {
 	Key   string `json:"key" jsonschema:"Ticket key, e.g. PROJ-123"`
 	URL   string `json:"url" jsonschema:"http or https URL"`
@@ -306,6 +311,21 @@ func (s *server) registerReads(srv *mcp.Server) {
 			}
 			return structured(render.IssueTypes(ts), &issueTypesOut{IssueTypes: ts})
 		})
+	add(srv, "list_epics", "List the open epics of a project, newest first, to put tickets under with update_issue (field parent) or create_issue. Epics of other people show only key, type and status unless the user allowed their summaries.", readOnly(),
+		func(ctx context.Context, _ *mcp.CallToolRequest, in projectMaxInput) (*mcp.CallToolResult, *epicsOut, error) {
+			project := in.Project
+			if project == "" {
+				project = s.opts.DefaultProject
+			}
+			if project == "" {
+				return nil, nil, errors.New("name the project")
+			}
+			es, err := s.svc.Epics(ctx, project, in.Max)
+			if err != nil {
+				return nil, nil, err
+			}
+			return structured(render.Epics(es), &epicsOut{Epics: es})
+		})
 	add(srv, "get_attachment", "Download an attachment of a ticket. Small text files and images are returned inline; the file is saved locally in any case.", readOnly(),
 		func(ctx context.Context, _ *mcp.CallToolRequest, in attachmentInput) (*mcp.CallToolResult, any, error) {
 			a, err := s.svc.Attachment(ctx, in.Key, in.AttachmentID, s.opts.DownloadDir)
@@ -348,7 +368,7 @@ type createInput struct {
 	Description string            `json:"description,omitempty" jsonschema:"Description in Markdown"`
 	Labels      []string          `json:"labels,omitempty" jsonschema:"Labels without spaces"`
 	Priority    string            `json:"priority,omitempty" jsonschema:"Priority name"`
-	Parent      string            `json:"parent,omitempty" jsonschema:"Parent ticket key, required for subtasks"`
+	Parent      string            `json:"parent,omitempty" jsonschema:"Parent ticket key: required for subtasks; an epic (see list_epics) for other types"`
 	Fields      map[string]string `json:"fields,omitempty" jsonschema:"Other fields on the create screen, name to value"`
 }
 

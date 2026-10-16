@@ -29,6 +29,9 @@ type IssueType struct {
 	ID      string `json:"id"`
 	Name    string `json:"name"`
 	Subtask bool   `json:"subtask"`
+	// HierarchyLevel is -1 for subtasks, 0 for standard types and 1 or more
+	// for types above them, such as epics.
+	HierarchyLevel int `json:"hierarchyLevel"`
 }
 
 type Named struct {
