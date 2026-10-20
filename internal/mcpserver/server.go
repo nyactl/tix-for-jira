@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"unicode/utf8"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -35,6 +36,25 @@ type server struct {
 	svc  *core.Service
 	opts Options
 	gate *approval.Gate
+
+	mu      sync.Mutex
+	connect func(context.Context) (*core.Service, error) // set while svc is nil
+}
+
+// ready connects to Jira if the server started without a connection. Tool
+// handlers may use s.svc once it returns nil.
+func (s *server) ready(ctx context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.svc != nil {
+		return nil
+	}
+	svc, err := s.connect(ctx)
+	if err != nil {
+		return fmt.Errorf("tix-for-jira cannot use Jira: %w. Tell the user; this is not something to retry or work around", err)
+	}
+	s.svc, s.connect = svc, nil
+	return nil
 }
 
 func instructions(site string, mode config.PrivacyMode, writes bool) string {
@@ -56,13 +76,26 @@ func instructions(site string, mode config.PrivacyMode, writes bool) string {
 
 // New builds the MCP server.
 func New(svc *core.Service, opts Options) *mcp.Server {
-	s := &server{svc: svc, opts: opts, gate: approval.NewGate()}
-	srv := mcp.NewServer(&mcp.Implementation{Name: "tix-for-jira", Version: opts.Version}, &mcp.ServerOptions{
-		Instructions: instructions(svc.Site(), svc.Mode(), opts.AllowWrites),
-	})
+	return build(&server{svc: svc, opts: opts, gate: approval.NewGate()}, instructions(svc.Site(), svc.Mode(), opts.AllowWrites))
+}
+
+// NewDisconnected builds the MCP server for when tix could not connect at
+// start, for example because the token was rejected. It offers the usual
+// tools; each call tries connect again and, while it fails, returns its
+// error, so the client can show the user why instead of a closed
+// connection.
+func NewDisconnected(err error, connect func(context.Context) (*core.Service, error), site string, mode config.PrivacyMode, opts Options) *mcp.Server {
+	s := &server{opts: opts, gate: approval.NewGate(), connect: connect}
+	instr := instructions(site, mode, opts.AllowWrites) +
+		"\n\nAt start, tix-for-jira could not use Jira: " + sanitize.String(err.Error()) + "\nTools fail until this is fixed; tell the user."
+	return build(s, instr)
+}
+
+func build(s *server, instr string) *mcp.Server {
+	srv := mcp.NewServer(&mcp.Implementation{Name: "tix-for-jira", Version: s.opts.Version}, &mcp.ServerOptions{Instructions: instr})
 	s.registerReads(srv)
 	s.registerPrompts(srv)
-	if opts.AllowWrites {
+	if s.opts.AllowWrites {
 		s.registerWrites(srv)
 	}
 	return srv
@@ -71,6 +104,11 @@ func New(svc *core.Service, opts Options) *mcp.Server {
 // Run serves over stdio until the client disconnects.
 func Run(ctx context.Context, svc *core.Service, opts Options) error {
 	return New(svc, opts).Run(ctx, &mcp.StdioTransport{})
+}
+
+// RunDisconnected serves NewDisconnected over stdio.
+func RunDisconnected(ctx context.Context, err error, connect func(context.Context) (*core.Service, error), site string, mode config.PrivacyMode, opts Options) error {
+	return NewDisconnected(err, connect, site, mode, opts).Run(ctx, &mcp.StdioTransport{})
 }
 
 var closedWorld = false
@@ -88,8 +126,14 @@ func text(s string) (*mcp.CallToolResult, any, error) {
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: s}}}, nil, nil
 }
 
-func add[In, Out any](srv *mcp.Server, name, desc string, ann *mcp.ToolAnnotations, h mcp.ToolHandlerFor[In, Out]) {
-	mcp.AddTool(srv, &mcp.Tool{Name: name, Description: desc, Annotations: ann}, h)
+func add[In, Out any](s *server, srv *mcp.Server, name, desc string, ann *mcp.ToolAnnotations, h mcp.ToolHandlerFor[In, Out]) {
+	mcp.AddTool(srv, &mcp.Tool{Name: name, Description: desc, Annotations: ann}, func(ctx context.Context, req *mcp.CallToolRequest, in In) (*mcp.CallToolResult, Out, error) {
+		if err := s.ready(ctx); err != nil {
+			var zero Out
+			return nil, zero, err
+		}
+		return h(ctx, req, in)
+	})
 }
 
 type keyInput struct {
@@ -162,7 +206,7 @@ type boardInput struct {
 type emptyInput struct{}
 
 func (s *server) registerReads(srv *mcp.Server) {
-	add(srv, "whoami", "Show the authenticated user, Jira site and privacy mode.", readOnly(),
+	add(s, srv, "whoami", "Show the authenticated user, Jira site and privacy mode.", readOnly(),
 		func(ctx context.Context, _ *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, *core.Me, error) {
 			me, err := s.svc.Whoami(ctx)
 			if err != nil {
@@ -170,7 +214,7 @@ func (s *server) registerReads(srv *mcp.Server) {
 			}
 			return structured(render.Me(me), me)
 		})
-	add(srv, "my_issues", "List tickets assigned to the user, most recently updated first. Open tickets only unless include_done is set.", readOnly(),
+	add(s, srv, "my_issues", "List tickets assigned to the user, most recently updated first. Open tickets only unless include_done is set.", readOnly(),
 		func(ctx context.Context, _ *mcp.CallToolRequest, in myIssuesInput) (*mcp.CallToolResult, *issuesOut, error) {
 			list, err := s.svc.MyIssues(ctx, core.MyIssuesOptions{IncludeDone: in.IncludeDone, Since: in.Since, Project: in.Project, Text: in.Text, Max: in.Max})
 			if err != nil {
@@ -178,7 +222,7 @@ func (s *server) registerReads(srv *mcp.Server) {
 			}
 			return structured(render.IssueList(list), &issuesOut{Issues: list})
 		})
-	add(srv, "search_issues", "Search tickets with JQL, or with a saved search written as @name (see list_saved_searches), limited to the privacy scope.", readOnly(),
+	add(s, srv, "search_issues", "Search tickets with JQL, or with a saved search written as @name (see list_saved_searches), limited to the privacy scope.", readOnly(),
 		func(ctx context.Context, _ *mcp.CallToolRequest, in searchInput) (*mcp.CallToolResult, *issuesOut, error) {
 			jql := in.JQL
 			if strings.HasPrefix(strings.TrimSpace(jql), "@") {
@@ -195,11 +239,11 @@ func (s *server) registerReads(srv *mcp.Server) {
 			}
 			return structured(render.IssueList(list), &issuesOut{Issues: list})
 		})
-	add(srv, "list_saved_searches", "List the user's saved searches, usable in search_issues as @name.", readOnly(),
+	add(s, srv, "list_saved_searches", "List the user's saved searches, usable in search_issues as @name.", readOnly(),
 		func(ctx context.Context, _ *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, *searchesOut, error) {
 			return structured(render.SavedSearches(s.opts.Searches), &searchesOut{Searches: s.opts.Searches})
 		})
-	add(srv, "get_issue", "Show a ticket: fields, description, related tickets, attachments and custom fields.", readOnly(),
+	add(s, srv, "get_issue", "Show a ticket: fields, description, related tickets, attachments and custom fields.", readOnly(),
 		func(ctx context.Context, _ *mcp.CallToolRequest, in keyInput) (*mcp.CallToolResult, *core.IssueDetail, error) {
 			d, err := s.svc.Issue(ctx, in.Key)
 			if err != nil {
@@ -207,7 +251,7 @@ func (s *server) registerReads(srv *mcp.Server) {
 			}
 			return structured(render.Issue(d), d)
 		})
-	add(srv, "list_comments", "List a ticket's comments, oldest first.", readOnly(),
+	add(s, srv, "list_comments", "List a ticket's comments, oldest first.", readOnly(),
 		func(ctx context.Context, _ *mcp.CallToolRequest, in keyMaxInput) (*mcp.CallToolResult, *commentsOut, error) {
 			cs, err := s.svc.Comments(ctx, in.Key, in.Max)
 			if err != nil {
@@ -215,7 +259,7 @@ func (s *server) registerReads(srv *mcp.Server) {
 			}
 			return structured(render.Comments(cs), &commentsOut{Comments: cs})
 		})
-	add(srv, "get_history", "Show a ticket's change history, oldest first.", readOnly(),
+	add(s, srv, "get_history", "Show a ticket's change history, oldest first.", readOnly(),
 		func(ctx context.Context, _ *mcp.CallToolRequest, in historyInput) (*mcp.CallToolResult, *historyOut, error) {
 			hs, err := s.svc.History(ctx, in.Key, in.Since, in.Max)
 			if err != nil {
@@ -223,7 +267,7 @@ func (s *server) registerReads(srv *mcp.Server) {
 			}
 			return structured(render.History(hs), &historyOut{Changes: hs})
 		})
-	add(srv, "get_status_times", "Show how long a ticket spent in each status, from its change history, and how often it entered each.", readOnly(),
+	add(s, srv, "get_status_times", "Show how long a ticket spent in each status, from its change history, and how often it entered each.", readOnly(),
 		func(ctx context.Context, _ *mcp.CallToolRequest, in keyInput) (*mcp.CallToolResult, *core.StatusTimesView, error) {
 			v, err := s.svc.StatusTimes(ctx, in.Key)
 			if err != nil {
@@ -231,7 +275,7 @@ func (s *server) registerReads(srv *mcp.Server) {
 			}
 			return structured(render.StatusTimes(v), v)
 		})
-	add(srv, "list_worklogs", "List work logged on a ticket.", readOnly(),
+	add(s, srv, "list_worklogs", "List work logged on a ticket.", readOnly(),
 		func(ctx context.Context, _ *mcp.CallToolRequest, in keyMaxInput) (*mcp.CallToolResult, *worklogsOut, error) {
 			ws, err := s.svc.Worklogs(ctx, in.Key, in.Max)
 			if err != nil {
@@ -239,7 +283,7 @@ func (s *server) registerReads(srv *mcp.Server) {
 			}
 			return structured(render.Worklogs(ws), &worklogsOut{Worklogs: ws})
 		})
-	add(srv, "list_transitions", "List the status changes available for a ticket.", readOnly(),
+	add(s, srv, "list_transitions", "List the status changes available for a ticket.", readOnly(),
 		func(ctx context.Context, _ *mcp.CallToolRequest, in keyInput) (*mcp.CallToolResult, *transitionsOut, error) {
 			ts, err := s.svc.Transitions(ctx, in.Key)
 			if err != nil {
@@ -247,7 +291,7 @@ func (s *server) registerReads(srv *mcp.Server) {
 			}
 			return structured(render.Transitions(ts), &transitionsOut{Transitions: ts})
 		})
-	add(srv, "list_editable_fields", "List the fields that can be changed on a ticket, with their types and allowed values.", readOnly(),
+	add(s, srv, "list_editable_fields", "List the fields that can be changed on a ticket, with their types and allowed values.", readOnly(),
 		func(ctx context.Context, _ *mcp.CallToolRequest, in keyInput) (*mcp.CallToolResult, *fieldsOut, error) {
 			fs, err := s.svc.EditableFields(ctx, in.Key)
 			if err != nil {
@@ -255,7 +299,7 @@ func (s *server) registerReads(srv *mcp.Server) {
 			}
 			return structured(render.EditableFields(fs), &fieldsOut{Fields: fs})
 		})
-	add(srv, "list_link_types", "List the link relations (e.g. \"blocks\", \"is blocked by\") available for link_issues.", readOnly(),
+	add(s, srv, "list_link_types", "List the link relations (e.g. \"blocks\", \"is blocked by\") available for link_issues.", readOnly(),
 		func(ctx context.Context, _ *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, *linkTypesOut, error) {
 			ls, err := s.svc.LinkTypes(ctx)
 			if err != nil {
@@ -263,7 +307,7 @@ func (s *server) registerReads(srv *mcp.Server) {
 			}
 			return structured(render.LinkTypes(ls), &linkTypesOut{LinkTypes: ls})
 		})
-	add(srv, "list_projects", "List projects in which the user can create tickets.", readOnly(),
+	add(s, srv, "list_projects", "List projects in which the user can create tickets.", readOnly(),
 		func(ctx context.Context, _ *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, *projectsOut, error) {
 			ps, err := s.svc.Projects(ctx)
 			if err != nil {
@@ -271,7 +315,7 @@ func (s *server) registerReads(srv *mcp.Server) {
 			}
 			return structured(render.Projects(ps), &projectsOut{Projects: ps})
 		})
-	add(srv, "list_boards", "List Jira Software boards, optionally of one project.", readOnly(),
+	add(s, srv, "list_boards", "List Jira Software boards, optionally of one project.", readOnly(),
 		func(ctx context.Context, _ *mcp.CallToolRequest, in boardsInput) (*mcp.CallToolResult, *boardsOut, error) {
 			bs, err := s.svc.Boards(ctx, in.Project)
 			if err != nil {
@@ -279,7 +323,7 @@ func (s *server) registerReads(srv *mcp.Server) {
 			}
 			return structured(render.Boards(bs), &boardsOut{Boards: bs})
 		})
-	add(srv, "list_sprints", "List the active and future sprints of a board.", readOnly(),
+	add(s, srv, "list_sprints", "List the active and future sprints of a board.", readOnly(),
 		func(ctx context.Context, _ *mcp.CallToolRequest, in boardInput) (*mcp.CallToolResult, *sprintsOut, error) {
 			ss, err := s.svc.Sprints(ctx, in.Board)
 			if err != nil {
@@ -287,7 +331,7 @@ func (s *server) registerReads(srv *mcp.Server) {
 			}
 			return structured(render.Sprints(ss), &sprintsOut{Sprints: ss})
 		})
-	add(srv, "get_active_sprint", "Show the user's tickets in the active sprint of a board, in board order, with the total number of tickets in the sprint.", readOnly(),
+	add(s, srv, "get_active_sprint", "Show the user's tickets in the active sprint of a board, in board order, with the total number of tickets in the sprint.", readOnly(),
 		func(ctx context.Context, _ *mcp.CallToolRequest, in boardInput) (*mcp.CallToolResult, *sprintIssuesOut, error) {
 			gs, err := s.svc.ActiveSprints(ctx, in.Board, in.Max)
 			if err != nil {
@@ -295,7 +339,7 @@ func (s *server) registerReads(srv *mcp.Server) {
 			}
 			return structured(render.BoardIssues(gs), &sprintIssuesOut{Sprints: gs})
 		})
-	add(srv, "get_backlog", "Show the user's tickets in the backlog of a board, in board order, with the total number of tickets in the backlog.", readOnly(),
+	add(s, srv, "get_backlog", "Show the user's tickets in the backlog of a board, in board order, with the total number of tickets in the backlog.", readOnly(),
 		func(ctx context.Context, _ *mcp.CallToolRequest, in boardInput) (*mcp.CallToolResult, *core.BoardIssues, error) {
 			g, err := s.svc.Backlog(ctx, in.Board, in.Max)
 			if err != nil {
@@ -303,7 +347,7 @@ func (s *server) registerReads(srv *mcp.Server) {
 			}
 			return structured(render.BoardIssues([]core.BoardIssues{*g}), g)
 		})
-	add(srv, "list_issue_types", "List the issue types the user can create in a project.", readOnly(),
+	add(s, srv, "list_issue_types", "List the issue types the user can create in a project.", readOnly(),
 		func(ctx context.Context, _ *mcp.CallToolRequest, in projectInput) (*mcp.CallToolResult, *issueTypesOut, error) {
 			ts, err := s.svc.IssueTypes(ctx, in.Project)
 			if err != nil {
@@ -311,7 +355,7 @@ func (s *server) registerReads(srv *mcp.Server) {
 			}
 			return structured(render.IssueTypes(ts), &issueTypesOut{IssueTypes: ts})
 		})
-	add(srv, "list_epics", "List the open epics of a project, newest first, to put tickets under with update_issue (field parent) or create_issue. Epics of other people show only key, type and status unless the user allowed their summaries.", readOnly(),
+	add(s, srv, "list_epics", "List the open epics of a project, newest first, to put tickets under with update_issue (field parent) or create_issue. Epics of other people show only key, type and status unless the user allowed their summaries.", readOnly(),
 		func(ctx context.Context, _ *mcp.CallToolRequest, in projectMaxInput) (*mcp.CallToolResult, *epicsOut, error) {
 			project := in.Project
 			if project == "" {
@@ -326,7 +370,7 @@ func (s *server) registerReads(srv *mcp.Server) {
 			}
 			return structured(render.Epics(es), &epicsOut{Epics: es})
 		})
-	add(srv, "get_attachment", "Download an attachment of a ticket. Small text files and images are returned inline; the file is saved locally in any case.", readOnly(),
+	add(s, srv, "get_attachment", "Download an attachment of a ticket. Small text files and images are returned inline; the file is saved locally in any case.", readOnly(),
 		func(ctx context.Context, _ *mcp.CallToolRequest, in attachmentInput) (*mcp.CallToolResult, any, error) {
 			a, err := s.svc.Attachment(ctx, in.Key, in.AttachmentID, s.opts.DownloadDir)
 			if err != nil {
@@ -406,12 +450,12 @@ func (s *server) approveThenApply(ctx context.Context, req *mcp.CallToolRequest,
 }
 
 func (s *server) registerWrites(srv *mcp.Server) {
-	add(srv, "add_comment", "Add a comment to a ticket. The user approves it first.", writeAnnotations(core.Additive),
+	add(s, srv, "add_comment", "Add a comment to a ticket. The user approves it first.", writeAnnotations(core.Additive),
 		func(ctx context.Context, req *mcp.CallToolRequest, in commentInput) (*mcp.CallToolResult, any, error) {
 			p, err := s.svc.PlanComment(ctx, in.Key, in.Body)
 			return s.approveThenApply(ctx, req, "add_comment", in, p, err)
 		})
-	add(srv, "update_fields", "Change fields of a ticket (not people fields). The user approves the exact before/after values first.", writeAnnotations(core.Destructive),
+	add(s, srv, "update_fields", "Change fields of a ticket (not people fields). The user approves the exact before/after values first.", writeAnnotations(core.Destructive),
 		func(ctx context.Context, req *mcp.CallToolRequest, in updateInput) (*mcp.CallToolResult, any, error) {
 			names := make([]string, 0, len(in.Fields))
 			for n := range in.Fields {
@@ -425,12 +469,12 @@ func (s *server) registerWrites(srv *mcp.Server) {
 			p, err := s.svc.PlanUpdate(ctx, in.Key, changes)
 			return s.approveThenApply(ctx, req, "update_fields", in, p, err)
 		})
-	add(srv, "transition_issue", "Move a ticket to another status, optionally with a comment. The user approves it first.", writeAnnotations(core.Destructive),
+	add(s, srv, "transition_issue", "Move a ticket to another status, optionally with a comment. The user approves it first.", writeAnnotations(core.Destructive),
 		func(ctx context.Context, req *mcp.CallToolRequest, in transitionInput) (*mcp.CallToolResult, any, error) {
 			p, err := s.svc.PlanTransition(ctx, in.Key, in.To, in.Comment)
 			return s.approveThenApply(ctx, req, "transition_issue", in, p, err)
 		})
-	add(srv, "create_issue", "Create a ticket assigned to the user. The user approves it first.", writeAnnotations(core.Additive),
+	add(s, srv, "create_issue", "Create a ticket assigned to the user. The user approves it first.", writeAnnotations(core.Additive),
 		func(ctx context.Context, req *mcp.CallToolRequest, in createInput) (*mcp.CallToolResult, any, error) {
 			project := in.Project
 			if project == "" {
@@ -443,37 +487,37 @@ func (s *server) registerWrites(srv *mcp.Server) {
 				Labels: in.Labels, Priority: in.Priority, Parent: in.Parent, Fields: in.Fields})
 			return s.approveThenApply(ctx, req, "create_issue", in, p, err)
 		})
-	add(srv, "log_work", "Log time spent on a ticket. The user approves it first.", writeAnnotations(core.Additive),
+	add(s, srv, "log_work", "Log time spent on a ticket. The user approves it first.", writeAnnotations(core.Additive),
 		func(ctx context.Context, req *mcp.CallToolRequest, in worklogInput) (*mcp.CallToolResult, any, error) {
 			p, err := s.svc.PlanWorklog(ctx, in.Key, in.Duration, in.Started, in.Comment)
 			return s.approveThenApply(ctx, req, "log_work", in, p, err)
 		})
-	add(srv, "link_issues", "Link two tickets, e.g. PROJ-1 blocks PROJ-2. The user approves it first.", writeAnnotations(core.Additive),
+	add(s, srv, "link_issues", "Link two tickets, e.g. PROJ-1 blocks PROJ-2. The user approves it first.", writeAnnotations(core.Additive),
 		func(ctx context.Context, req *mcp.CallToolRequest, in linkInput) (*mcp.CallToolResult, any, error) {
 			p, err := s.svc.PlanLink(ctx, in.Key, in.Relation, in.Other)
 			return s.approveThenApply(ctx, req, "link_issues", in, p, err)
 		})
-	add(srv, "assign_to_me", "Assign an unassigned ticket to the user, which brings it into scope. Tickets assigned to someone else are refused. The user approves it first.", writeAnnotations(core.Destructive),
+	add(s, srv, "assign_to_me", "Assign an unassigned ticket to the user, which brings it into scope. Tickets assigned to someone else are refused. The user approves it first.", writeAnnotations(core.Destructive),
 		func(ctx context.Context, req *mcp.CallToolRequest, in keyInput) (*mcp.CallToolResult, any, error) {
 			p, err := s.svc.PlanTake(ctx, in.Key)
 			return s.approveThenApply(ctx, req, "assign_to_me", in, p, err)
 		})
-	add(srv, "watch_issue", "Watch a ticket, so the user gets its notifications. The user approves it first.", writeAnnotations(core.Additive),
+	add(s, srv, "watch_issue", "Watch a ticket, so the user gets its notifications. The user approves it first.", writeAnnotations(core.Additive),
 		func(ctx context.Context, req *mcp.CallToolRequest, in keyInput) (*mcp.CallToolResult, any, error) {
 			p, err := s.svc.PlanWatch(ctx, in.Key, true)
 			return s.approveThenApply(ctx, req, "watch_issue", in, p, err)
 		})
-	add(srv, "unwatch_issue", "Stop watching a ticket. The user approves it first.", writeAnnotations(core.Destructive),
+	add(s, srv, "unwatch_issue", "Stop watching a ticket. The user approves it first.", writeAnnotations(core.Destructive),
 		func(ctx context.Context, req *mcp.CallToolRequest, in keyInput) (*mcp.CallToolResult, any, error) {
 			p, err := s.svc.PlanWatch(ctx, in.Key, false)
 			return s.approveThenApply(ctx, req, "unwatch_issue", in, p, err)
 		})
-	add(srv, "add_web_link", "Add a web link (http or https) to a ticket. The user approves it first.", writeAnnotations(core.Additive),
+	add(s, srv, "add_web_link", "Add a web link (http or https) to a ticket. The user approves it first.", writeAnnotations(core.Additive),
 		func(ctx context.Context, req *mcp.CallToolRequest, in webLinkInput) (*mcp.CallToolResult, any, error) {
 			p, err := s.svc.PlanWebLink(ctx, in.Key, in.URL, in.Title)
 			return s.approveThenApply(ctx, req, "add_web_link", in, p, err)
 		})
-	add(srv, "attach_file", "Upload a local file the user named to a ticket. The user approves the file name, size and path first.", writeAnnotations(core.Additive),
+	add(s, srv, "attach_file", "Upload a local file the user named to a ticket. The user approves the file name, size and path first.", writeAnnotations(core.Additive),
 		func(ctx context.Context, req *mcp.CallToolRequest, in attachInput) (*mcp.CallToolResult, any, error) {
 			if err := checkUploadPath(in.Path); err != nil {
 				return nil, nil, err
@@ -481,7 +525,7 @@ func (s *server) registerWrites(srv *mcp.Server) {
 			p, err := s.svc.PlanAttach(ctx, in.Key, in.Path)
 			return s.approveThenApply(ctx, req, "attach_file", in, p, err)
 		})
-	add(srv, "move_to_sprint", "Move a ticket into an active or future sprint, or to the backlog. The user approves it first.", writeAnnotations(core.Destructive),
+	add(s, srv, "move_to_sprint", "Move a ticket into an active or future sprint, or to the backlog. The user approves it first.", writeAnnotations(core.Destructive),
 		func(ctx context.Context, req *mcp.CallToolRequest, in sprintMoveInput) (*mcp.CallToolResult, any, error) {
 			p, err := s.svc.PlanMoveSprint(ctx, in.Key, in.Sprint)
 			return s.approveThenApply(ctx, req, "move_to_sprint", in, p, err)

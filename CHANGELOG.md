@@ -11,6 +11,10 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 - `tix epics` and the MCP tool `list_epics` list a project's open epics.
 - `tix config epic-summaries on` also shows the summaries of other people's epics.
 
+### Changed
+
+- `tix mcp` no longer exits when Jira rejects the token, the token is missing or Jira is out of reach. It starts anyway, and every tool call returns the reason and the fix, such as `tix auth login`, so MCP clients show it instead of "Connection closed". After a new login, the next call connects without restarting the client.
+
 ## [0.4.1] - 2026-10-16
 
 ### Changed
