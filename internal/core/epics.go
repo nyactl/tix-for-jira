@@ -3,35 +3,13 @@ package core
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/nyactl/approvekit/atlassian"
 	"github.com/nyactl/tix-for-jira/internal/jira"
 )
 
-// ShowEpicSummaries makes epics outside the privacy scope show their
-// summaries, redacted; otherwise only their key, type and status are shown.
-func (s *Service) ShowEpicSummaries(on bool) { s.epicSummaries = on }
-
 func aboveStandard(t *jira.IssueType) bool { return t != nil && t.HierarchyLevel > 0 }
-
-// epicView describes a ticket above standard tickets that may be outside
-// the privacy scope. No people are learned from it.
-func (s *Service) epicView(issue *jira.Issue) Related {
-	f := issue.Fields
-	v := Related{Relation: "epic", Key: issue.Key}
-	if f.IssueType != nil {
-		v.Type = f.IssueType.Name
-	}
-	if f.Status != nil {
-		v.Status = f.Status.Name
-	}
-	if s.visible(f.Assignee) || s.epicSummaries {
-		v.Summary = s.people.Text(f.Summary)
-	}
-	return v
-}
 
 func describeRelated(r Related) string {
 	var parts []string
@@ -52,8 +30,8 @@ func describeRelated(r Related) string {
 
 // parentFor fetches the ticket that is to become the parent of child. Your
 // own tickets qualify as before. A ticket of someone else qualifies only
-// when its type is above standard tickets, such as an epic: tix reads its
-// key, type and status and, if allowed, its summary, nothing else.
+// when its type is above standard tickets, such as an epic: tix then reads
+// only its key, type and status, which tix shows for any parent anyway.
 func (s *Service) parentFor(ctx context.Context, key, child string) (*jira.Issue, string, error) {
 	k, err := jira.NormalizeKey(key)
 	if err != nil {
@@ -76,47 +54,64 @@ func (s *Service) parentFor(ctx context.Context, key, child string) (*jira.Issue
 	if !aboveStandard(issue.Fields.IssueType) {
 		return nil, "", ErrNotFound
 	}
-	return issue, describeRelated(s.epicView(issue)), nil
+	v := Related{Key: issue.Key}
+	if t := issue.Fields.IssueType; t != nil {
+		v.Type = t.Name
+	}
+	if st := issue.Fields.Status; st != nil {
+		v.Status = st.Name
+	}
+	return issue, describeRelated(v), nil
 }
 
-// Epics lists the open tickets of a project above standard tickets, such
-// as epics, newest first, at most limit (default 50). They may be outside the privacy scope, so each
-// shows only its key, type and status and, if allowed, its summary.
-func (s *Service) Epics(ctx context.Context, project string, limit int) ([]Related, error) {
-	pk, err := jira.NormalizeProjectKey(project)
-	if err != nil {
-		return nil, err
+// MyEpics lists the open epics that your tickets belong to, most recently
+// used first, optionally only those of one project. They come from your
+// own tickets' parents, so they show no more than `tix show` does for a
+// parent: key, type and status (and the summary in privacy mode off).
+func (s *Service) MyEpics(ctx context.Context, project string) ([]Related, error) {
+	es, _, err := s.myEpics(ctx, project)
+	return es, err
+}
+
+// MyEpicsForPicker is MyEpics with every epic's summary, names replaced.
+// Use it only for the interactive picker, which only the person at the
+// terminal sees; never print or return these summaries.
+func (s *Service) MyEpicsForPicker(ctx context.Context, project string) ([]Related, error) {
+	es, summaries, err := s.myEpics(ctx, project)
+	for i := range es {
+		es[i].Summary = s.people.Text(summaries[i])
 	}
-	if limit <= 0 {
-		limit = 50
-	}
-	types, err := s.jc.ProjectIssueTypes(ctx, pk)
-	if errors.Is(err, atlassian.ErrNotFound) {
-		return nil, fmt.Errorf("project %s not found", pk)
-	}
-	if err != nil {
-		return nil, err
-	}
-	var ids []string
-	for i := range types {
-		if aboveStandard(&types[i]) {
-			ids = append(ids, types[i].ID)
+	return es, err
+}
+
+func (s *Service) myEpics(ctx context.Context, project string) ([]Related, []string, error) {
+	pk := ""
+	if project != "" {
+		var err error
+		if pk, err = jira.NormalizeProjectKey(project); err != nil {
+			return nil, nil, err
 		}
 	}
-	if len(ids) == 0 {
-		return nil, fmt.Errorf("project %s has no epics or other types above standard tickets", pk)
-	}
-	jql := fmt.Sprintf("project = %s AND issuetype in (%s) AND statusCategory != Done ORDER BY created DESC", pk, strings.Join(ids, ", "))
-	issues, err := s.jc.Search(ctx, jql, []string{"assignee", "summary", "status", "issuetype"}, limit)
+	issues, err := s.jc.Search(ctx, "assignee = currentUser() AND parent is not EMPTY ORDER BY updated DESC", []string{"assignee", "parent"}, 200)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	out := make([]Related, 0, len(issues))
-	for i := range issues {
-		// The query is not trusted to keep to these types.
-		if aboveStandard(issues[i].Fields.IssueType) {
-			out = append(out, s.epicView(&issues[i]))
+	var out []Related
+	var summaries []string
+	seen := map[string]bool{}
+	for _, is := range issues {
+		p := is.Fields.Parent
+		// The query is not trusted to keep to your tickets with epics.
+		if is.Fields.Assignee == nil || is.Fields.Assignee.AccountID != s.people.MeID() || p == nil || !aboveStandard(p.Fields.IssueType) {
+			continue
 		}
+		if seen[p.Key] || (pk != "" && !strings.HasPrefix(p.Key, pk+"-")) || (p.Fields.Status != nil && p.Fields.Status.StatusCategory.Key == "done") {
+			continue
+		}
+		seen[p.Key] = true
+		r := s.related("epic", p)
+		out = append(out, r)
+		summaries = append(summaries, p.Fields.Summary)
 	}
-	return out, nil
+	return out, summaries, nil
 }

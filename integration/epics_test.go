@@ -64,25 +64,31 @@ func TestEpicOfSomeoneElse(t *testing.T) {
 	}
 	other.assertAbsent(t, "issue", d)
 
-	epics, err := s.svc.Epics(ctx, s.project, 200)
+	// Their other epic, which none of the tested account's tickets is in,
+	// appears in no list.
+	unrelated := other.createOwnedType(t, s.project, "tix-for-jira epics: unrelated "+s.run, func(it jira.IssueType) bool { return it.HierarchyLevel == 1 })
+	epics, err := s.svc.MyEpics(ctx, s.project)
 	if err != nil {
 		t.Fatal(err)
 	}
 	i := slices.IndexFunc(epics, func(e core.Related) bool { return e.Key == epic })
-	if i < 0 || epics[i].Summary != "" || epics[i].Status == "" {
+	if i < 0 || epics[i].Summary != "" || epics[i].Status == "" || epics[i].Type == "" {
 		t.Errorf("epics: %+v", epics)
 	}
+	if slices.ContainsFunc(epics, func(e core.Related) bool { return e.Key == unrelated }) {
+		t.Errorf("an unrelated epic is listed: %+v", epics)
+	}
 	other.assertAbsent(t, "epics", epics)
-
-	s.svc.ShowEpicSummaries(true)
-	epics, _ = s.svc.Epics(ctx, s.project, 200)
-	if i := slices.IndexFunc(epics, func(e core.Related) bool { return e.Key == epic }); i < 0 || epics[i].Summary != epicSummary {
-		t.Errorf("epics with summaries: %+v", epics)
+	picks, err := s.svc.MyEpicsForPicker(ctx, s.project)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if d, _ := s.svc.Issue(ctx, mine); d == nil || d.Parent == nil || d.Parent.Summary != epicSummary {
-		t.Errorf("parent with summary: %+v", d)
+	if i := slices.IndexFunc(picks, func(e core.Related) bool { return e.Key == epic }); i < 0 || picks[i].Summary != epicSummary {
+		t.Errorf("picker epics: %+v", picks)
 	}
-	s.svc.ShowEpicSummaries(false)
+	if slices.ContainsFunc(picks, func(e core.Related) bool { return e.Key == unrelated }) {
+		t.Errorf("the picker offers an unrelated epic: %+v", picks)
+	}
 
 	msg := applied(t)(s.svc.PlanCreate(ctx, core.CreateInput{Project: s.project, Type: "Task", Summary: "tix-for-jira epics: created under it " + s.run, Parent: epic, Labels: []string{"tix-for-jira-it"}}))
 	created := strings.TrimSuffix(strings.Fields(msg)[1], ":")

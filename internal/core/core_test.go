@@ -1034,32 +1034,44 @@ func TestEpicParent(t *testing.T) {
 		t.Errorf("remove without parent: %v", err)
 	}
 
-	epics, err := s.Epics(ctx, "proj", 50)
+	// Lists of epics come only from the parents of your own tickets.
+	f.AddIssue(jiratest.Issue{Key: "PROJ-13", Summary: "Mine, in a done epic", Assignee: "acc-me", Parent: "PROJ-11"})
+	f.AddIssue(jiratest.Issue{Key: "PROJ-14", Type: "Epic", Summary: "Unrelated epic", Assignee: "acc-alice"})
+	f.Issues["PROJ-3"].Parent = "PROJ-10"
+	f.Issues["PROJ-1"].Parent = "PROJ-12"
+	epics, err := s.MyEpics(ctx, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []Related{{Relation: "epic", Key: "PROJ-10", Type: "Epic", Status: "To Do"}, {Relation: "epic", Key: "PROJ-12", Type: "Epic", Status: "To Do", Summary: "My epic"}}
+	want := []Related{{Relation: "epic", Key: "PROJ-12", Type: "Epic", Status: "To Do"}, {Relation: "epic", Key: "PROJ-10", Type: "Epic", Status: "To Do"}}
 	if !reflect.DeepEqual(epics, want) {
 		t.Errorf("epics = %+v", epics)
 	}
 	assertNoPersonalData(t, epics)
-
-	// With summaries allowed, epics show them, also as parents.
-	s.ShowEpicSummaries(true)
-	epics, _ = s.Epics(ctx, "PROJ", 50)
-	if len(epics) != 2 || epics[0].Summary != "Checkout redesign" {
-		t.Errorf("epics with summaries = %+v", epics)
+	if strings.Contains(fmt.Sprint(epics), "Checkout") {
+		t.Errorf("epics show summaries: %+v", epics)
 	}
-	f.Issues["PROJ-3"].Parent = "PROJ-10"
+	picks, err := s.MyEpicsForPicker(ctx, "proj")
+	if err != nil || len(picks) != 2 || picks[0].Summary != "My epic" || picks[1].Summary != "Checkout redesign" {
+		t.Errorf("picker epics = %+v, %v", picks, err)
+	}
+	if es, err := s.MyEpics(ctx, "OTHER"); err != nil || len(es) != 0 {
+		t.Errorf("epics of another project = %+v, %v", es, err)
+	}
+	// The query is not trusted: other people's tickets in the results are
+	// left out.
+	f.UnscopedSearch = true
+	f.AddIssue(jiratest.Issue{Key: "PROJ-15", Summary: "Alice's child", Assignee: "acc-alice", Parent: "PROJ-14"})
+	if es, _ := s.MyEpics(ctx, ""); len(es) != 2 {
+		t.Errorf("epics with an unscoped search = %+v", es)
+	}
+	f.UnscopedSearch = false
+
 	d, err := s.Issue(ctx, "PROJ-3")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d.Parent == nil || d.Parent.Summary != "Checkout redesign" {
+	if d.Parent == nil || d.Parent.Key != "PROJ-10" || d.Parent.Summary != "" {
 		t.Errorf("parent = %+v", d.Parent)
-	}
-	p, _ = s.PlanUpdate(ctx, "PROJ-1", []FieldInput{{"Parent", "PROJ-10"}})
-	if p == nil || !strings.Contains(p.Description, `"PROJ-10 (Epic, To Do) Checkout redesign"`) {
-		t.Errorf("plan with summary: %v", p)
 	}
 }

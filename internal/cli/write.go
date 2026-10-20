@@ -206,8 +206,8 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 		Use:   "parent [key] [epic]",
 		Short: "Put a ticket under an epic, or take it out with --remove",
 		Long: "Put one of your tickets under an epic. The epic may belong to someone else; tix shows only its key, type and\n" +
-			"status, and its summary if `tix config epic-summaries on` allows it. Without a key you choose the ticket, and\n" +
-			"without an epic one of the open epics of the ticket's project (or of --project).",
+			"status. Without a key you choose the ticket, and without an epic one of the open epics your tickets already\n" +
+			"belong to; for any other epic, give its key.",
 		Example: `  tix parent PROJ-12 PROJ-3
   tix parent PROJ-12
   tix parent PROJ-12 --remove`,
@@ -229,9 +229,6 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 			epic := ""
 			if !remove {
 				project, _ := cmd.Flags().GetString("project")
-				if project == "" {
-					project = projectOf(key)
-				}
 				if epic, err = a.epic(cmd.Context(), svc, project, args, 1); err != nil {
 					return err
 				}
@@ -241,7 +238,7 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 		},
 	}
 	parent.Flags().Bool("remove", false, "take the ticket out of its epic or parent")
-	parent.Flags().String("project", "", "choose the epic from this project instead of the ticket's")
+	parent.Flags().String("project", "", "offer only epics of this project")
 	create.Flags().StringArray("set", nil, `other field "Name=value" (repeatable)`)
 	_ = create.MarkFlagRequired("summary")
 

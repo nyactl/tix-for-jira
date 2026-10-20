@@ -251,7 +251,7 @@ func (s *Service) related(relation string, r *jira.RelatedIssue) Related {
 	if r.Fields.Status != nil {
 		v.Status = r.Fields.Status.Name
 	}
-	if s.people.Mode() == people.Off || (s.epicSummaries && aboveStandard(r.Fields.IssueType)) {
+	if s.people.Mode() == people.Off {
 		v.Summary = s.people.Text(r.Fields.Summary)
 	}
 	return v

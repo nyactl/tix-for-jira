@@ -351,12 +351,6 @@ func (f *Fake) serve(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"issueLinkTypes": out})
 	case p == "/rest/api/3/issueLink" && r.Method == http.MethodPost:
 		f.createLink(w, body)
-	case p == "/rest/api/3/project/PROJ":
-		var types []any
-		for _, t := range issueTypes {
-			types = append(types, typeJSON(t.name))
-		}
-		writeJSON(w, 200, map[string]any{"id": "1", "key": "PROJ", "name": "Project", "issueTypes": types})
 	case p == "/rest/api/3/project/search":
 		writeJSON(w, 200, map[string]any{"values": []any{map[string]string{"id": "1", "key": "PROJ", "name": "Project"}}, "total": 1, "isLast": true})
 	case p == "/rest/api/3/issue" && r.Method == http.MethodPost:

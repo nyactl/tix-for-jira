@@ -30,8 +30,6 @@ type Config struct {
 	Searches map[string]string `json:"searches,omitempty"`
 	// DefaultProject is used by `tix create` without --project.
 	DefaultProject string `json:"defaultProject,omitempty"`
-	// EpicSummaries shows the summaries of epics outside the privacy scope.
-	EpicSummaries bool `json:"epicSummaries,omitempty"`
 }
 
 var (
