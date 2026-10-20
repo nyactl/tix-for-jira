@@ -628,6 +628,70 @@ func (s *Service) verifyLink(ctx context.Context, key, other, typeName string, o
 	return fmt.Sprintf("Linked %s %s %s (link not visible yet).", key, phrase, other), nil
 }
 
+// PlanUnlink prepares removing the link between key and other. The other
+// ticket may be outside the scope: it only has to appear among key's links,
+// where it is shown anyway. relation is needed only when the two tickets are
+// linked more than once.
+func (s *Service) PlanUnlink(ctx context.Context, key, other, relation string) (*Plan, error) {
+	from, err := s.scoped(ctx, key, "issuelinks")
+	if err != nil {
+		return nil, err
+	}
+	to, err := jira.NormalizeKey(other)
+	if err != nil {
+		return nil, err
+	}
+	relation = strings.TrimSpace(relation)
+	type match struct {
+		id string
+		r  Related
+	}
+	var found []match
+	var phrases []string
+	for _, l := range from.Fields.IssueLinks {
+		var r Related
+		switch {
+		case l.OutwardIssue != nil && l.OutwardIssue.Key == to:
+			r = s.related(l.Type.Outward, l.OutwardIssue)
+		case l.InwardIssue != nil && l.InwardIssue.Key == to:
+			r = s.related(l.Type.Inward, l.InwardIssue)
+		default:
+			continue
+		}
+		phrases = append(phrases, r.Relation)
+		if relation == "" || strings.EqualFold(relation, r.Relation) || strings.EqualFold(relation, l.Type.Name) {
+			found = append(found, match{l.ID, r})
+		}
+	}
+	switch {
+	case len(phrases) == 0:
+		return nil, fmt.Errorf("%s is not linked to %s", from.Key, to)
+	case len(found) == 0:
+		return nil, fmt.Errorf("%s is not linked to %s with %q; it %s %s", from.Key, to, relation, strings.Join(phrases, " and "), to)
+	case len(found) > 1:
+		return nil, fmt.Errorf("%s is linked to %s more than once; give the relation: %s", from.Key, to, strings.Join(phrases, ", "))
+	}
+	m := found[0]
+	desc := m.r.Key
+	if m.r.Type != "" || m.r.Status != "" {
+		desc += " (" + strings.Trim(m.r.Type+", "+m.r.Status, ", ") + ")"
+	}
+	if m.r.Summary != "" {
+		desc += " " + m.r.Summary
+	}
+	return &Plan{
+		Kind:        Destructive,
+		Key:         from.Key,
+		Description: fmt.Sprintf("Remove the link: %s %s %s.", s.people.Text(headline(from)), m.r.Relation, desc),
+		apply: func(ctx context.Context) (string, error) {
+			if err := s.jc.DeleteLink(ctx, m.id); err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("Removed the link: %s %s %s.", from.Key, m.r.Relation, to), nil
+		},
+	}, nil
+}
+
 // PlanTake prepares assigning an unassigned ticket to the user. In own mode
 // the ticket is outside the scope until then, so the plan names only its
 // key, type and status.
@@ -806,6 +870,48 @@ func (s *Service) PlanWebLink(ctx context.Context, key, linkURL, title string) (
 				return "", err
 			}
 			return fmt.Sprintf("Added web link %s to %s.", linkURL, issue.Key), nil
+		},
+	}, nil
+}
+
+// PlanRemoveWebLink prepares removing the web links of key to linkURL.
+func (s *Service) PlanRemoveWebLink(ctx context.Context, key, linkURL string) (*Plan, error) {
+	linkURL = strings.TrimSpace(linkURL)
+	issue, err := s.scoped(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	existing, err := s.jc.RemoteLinks(ctx, issue.Key)
+	if err != nil {
+		return nil, err
+	}
+	var ids []int
+	var lines []string
+	for _, rl := range existing {
+		// Only the links Issue shows can be removed.
+		if isWebURL(rl.Object.URL) && rl.Object.URL == linkURL {
+			ids = append(ids, rl.ID)
+			lines = append(lines, "    "+s.people.Text(rl.Object.Title)+"\n    "+rl.Object.URL)
+		}
+	}
+	if len(ids) == 0 {
+		return nil, fmt.Errorf("%s has no web link to %s", issue.Key, linkURL)
+	}
+	what := "the web link"
+	if len(ids) > 1 {
+		what = fmt.Sprintf("%d web links", len(ids))
+	}
+	return &Plan{
+		Kind:        Destructive,
+		Key:         issue.Key,
+		Description: fmt.Sprintf("Remove %s from %s:\n\n%s", what, s.people.Text(headline(issue)), strings.Join(lines, "\n\n")),
+		apply: func(ctx context.Context) (string, error) {
+			for _, id := range ids {
+				if err := s.jc.DeleteRemoteLink(ctx, issue.Key, id); err != nil {
+					return "", err
+				}
+			}
+			return fmt.Sprintf("Removed web link %s from %s.", linkURL, issue.Key), nil
 		},
 	}, nil
 }

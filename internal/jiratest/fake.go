@@ -279,7 +279,8 @@ func (f *Fake) caller(r *http.Request) *User {
 }
 
 var (
-	reIssue       = regexp.MustCompile(`^/rest/api/3/issue/([A-Z][A-Z0-9_]*-[0-9]+)(/[a-z]+)?$`)
+	reIssue       = regexp.MustCompile(`^/rest/api/3/issue/([A-Z][A-Z0-9_]*-[0-9]+)(/[a-z]+(?:/[0-9]+)?)?$`)
+	reLink        = regexp.MustCompile(`^/rest/api/3/issueLink/([0-9]+)$`)
 	reAttachment  = regexp.MustCompile(`^/rest/api/3/attachment/content/([0-9]+)$`)
 	reCreateTypes = regexp.MustCompile(`^/rest/api/3/issue/createmeta/([A-Z0-9_]+)/issuetypes(?:/([0-9]+))?$`)
 )
@@ -351,6 +352,8 @@ func (f *Fake) serve(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"issueLinkTypes": out})
 	case p == "/rest/api/3/issueLink" && r.Method == http.MethodPost:
 		f.createLink(w, body)
+	case reLink.MatchString(p) && r.Method == http.MethodDelete:
+		f.deleteLink(w, reLink.FindStringSubmatch(p)[1])
 	case p == "/rest/api/3/project/search":
 		writeJSON(w, 200, map[string]any{"values": []any{map[string]string{"id": "1", "key": "PROJ", "name": "Project"}}, "total": 1, "isLast": true})
 	case p == "/rest/api/3/issue" && r.Method == http.MethodPost:
@@ -530,6 +533,17 @@ func linkTypeByName(name string) struct{ id, name, outward, inward string } {
 }
 
 func (f *Fake) issueRoute(w http.ResponseWriter, r *http.Request, i *Issue, sub string, body map[string]any, me *User) {
+	if id, ok := strings.CutPrefix(sub, "/remotelink/"); ok && r.Method == http.MethodDelete {
+		for k, rl := range i.RemoteLinks {
+			if strconv.Itoa(rl.ID) == id {
+				i.RemoteLinks = slices.Delete(i.RemoteLinks, k, k+1)
+				w.WriteHeader(204)
+				return
+			}
+		}
+		errJSON(w, 404, "remote link not found")
+		return
+	}
 	switch sub + " " + r.Method {
 	case " GET":
 		writeJSON(w, 200, f.issueJSON(i, r.URL.Query().Get("expand") == "names", me))
@@ -854,6 +868,17 @@ func (f *Fake) createLink(w http.ResponseWriter, body map[string]any) {
 	}
 	f.Links = append(f.Links, Link{ID: f.id(), Type: linkTypeByName(typ).name, Outward: out, Inward: in})
 	w.WriteHeader(201)
+}
+
+func (f *Fake) deleteLink(w http.ResponseWriter, id string) {
+	for k, l := range f.Links {
+		if l.ID == id {
+			f.Links = slices.Delete(f.Links, k, k+1)
+			w.WriteHeader(204)
+			return
+		}
+	}
+	errJSON(w, 404, "No issue link with id '"+id+"' exists.")
 }
 
 func (f *Fake) attachment(w http.ResponseWriter, r *http.Request, id string) {

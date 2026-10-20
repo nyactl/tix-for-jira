@@ -277,6 +277,39 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 		},
 	}
 
+	unlink := &cobra.Command{
+		Use:   "unlink [key] [other-key] [relation]",
+		Short: "Remove a link between tickets",
+		Long: "Remove a link between one of your tickets and another ticket.\n" +
+			"Without the other key, choose one of the ticket's links. The relation is needed only when the tickets are linked more than once.",
+		Args:              cobra.MaximumNArgs(3),
+		ValidArgsFunction: a.completeUnlink,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, _, err := a.service(cmd)
+			if err != nil {
+				return err
+			}
+			key, err := a.ticket(cmd.Context(), svc, args, 0)
+			if err != nil {
+				return err
+			}
+			other, relation := "", ""
+			if len(args) > 1 {
+				other = args[1]
+			}
+			if len(args) > 2 {
+				relation = args[2]
+			}
+			if other == "" {
+				if other, relation, err = a.link(cmd.Context(), svc, key); err != nil {
+					return err
+				}
+			}
+			p, err := svc.PlanUnlink(cmd.Context(), key, other, relation)
+			return a.apply(cmd, svc, p, err)
+		},
+	}
+
 	take := &cobra.Command{
 		Use:   "take <key>",
 		Short: "Assign an unassigned ticket to yourself",
@@ -307,12 +340,29 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 
 	weblink := &cobra.Command{
 		Use:   "weblink <key> <url> [title]",
-		Short: "Add a web link to a ticket",
-		Args:  cobra.RangeArgs(2, 3),
+		Short: "Add or remove a web link of a ticket",
+		Long: "Add a web link to a ticket.\n" +
+			"With --remove, remove the ticket's web link to the URL; without the URL, choose one of its web links.",
+		Args: func(cmd *cobra.Command, args []string) error {
+			if remove, _ := cmd.Flags().GetBool("remove"); remove {
+				return cobra.RangeArgs(1, 2)(cmd, args)
+			}
+			return cobra.RangeArgs(2, 3)(cmd, args)
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			svc, _, err := a.service(cmd)
 			if err != nil {
 				return err
+			}
+			if remove, _ := cmd.Flags().GetBool("remove"); remove {
+				u := ""
+				if len(args) > 1 {
+					u = args[1]
+				} else if u, err = a.webLink(cmd.Context(), svc, args[0]); err != nil {
+					return err
+				}
+				p, err := svc.PlanRemoveWebLink(cmd.Context(), args[0], u)
+				return a.apply(cmd, svc, p, err)
 			}
 			title := ""
 			if len(args) == 3 {
@@ -322,6 +372,7 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 			return a.apply(cmd, svc, p, err)
 		},
 	}
+	weblink.Flags().Bool("remove", false, "remove the web link to the URL instead")
 
 	watchCmd := func(use, short string, watch bool) *cobra.Command {
 		return &cobra.Command{
@@ -348,7 +399,7 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 	for _, c := range []*cobra.Command{logWork, link, weblink, attach} {
 		c.ValidArgsFunction = a.completeTickets
 	}
-	root.AddCommand(comment, update, transition, create, parent, logWork, link, weblink, take, attach,
+	root.AddCommand(comment, update, transition, create, parent, logWork, link, unlink, weblink, take, attach,
 		watchCmd("watch", "Watch a ticket to get its notifications", true),
 		watchCmd("unwatch", "Stop watching a ticket", false))
 }

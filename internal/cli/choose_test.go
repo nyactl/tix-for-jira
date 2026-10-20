@@ -152,3 +152,71 @@ func TestParent(t *testing.T) {
 		t.Errorf("config offers an epic setting: %q", out)
 	}
 }
+
+func TestUnlink(t *testing.T) {
+	e := newEnv(t).loggedIn(t)
+	e.fake.AddIssue(jiratest.Issue{Key: "PROJ-3", Summary: "Also mine", Assignee: "acc-me"})
+	e.fake.Links = append(e.fake.Links,
+		jiratest.Link{ID: "900", Type: "Blocks", Outward: "PROJ-1", Inward: "PROJ-2"},
+		jiratest.Link{ID: "901", Type: "Relates", Outward: "PROJ-1", Inward: "PROJ-3"})
+
+	out, _, _ := e.run(t, "__complete", "unlink", "PROJ-1", "")
+	if !strings.Contains(out, "PROJ-2\tblocks, To Do") || !strings.Contains(out, "PROJ-3\trelates to, To Do") || strings.Contains(out, "Not mine") {
+		t.Errorf("other-key completion: %q", out)
+	}
+	if out, _, _ = e.run(t, "__complete", "unlink", "PROJ-1", "PROJ-2", ""); !strings.Contains(out, "blocks\n") {
+		t.Errorf("relation completion: %q", out)
+	}
+
+	// Choose the ticket and the link; the other ticket is outside the scope.
+	e.tty.picks = []pickChoice{{"PROJ-1", ""}, {"PROJ-2", ""}}
+	e.tty.answers = []string{"y"}
+	if _, _, err := e.run(t, "unlink"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(e.tty.asked[len(e.tty.asked)-1], "Remove the link: PROJ-1 (Mine) blocks PROJ-2 (Task, To Do).") || strings.Contains(strings.Join(e.tty.picked, "\n"), "Not mine") {
+		t.Errorf("asked %q, picked %q", e.tty.asked, e.tty.picked)
+	}
+	if len(e.fake.Links) != 1 || e.fake.Links[0].ID != "901" {
+		t.Fatalf("links %+v", e.fake.Links)
+	}
+
+	e.tty.answers = []string{"y"}
+	if _, _, err := e.run(t, "unlink", "PROJ-1", "PROJ-3", "relates to"); err != nil || len(e.fake.Links) != 0 {
+		t.Fatalf("unlink by key: %v, %+v", err, e.fake.Links)
+	}
+	if _, _, err := e.run(t, "unlink", "PROJ-1"); err == nil || !strings.Contains(err.Error(), "PROJ-1 has no links") {
+		t.Errorf("no links: %v", err)
+	}
+}
+
+func TestRemoveWebLink(t *testing.T) {
+	e := newEnv(t).loggedIn(t)
+	e.fake.Issues["PROJ-1"].RemoteLinks = []jiratest.RemoteLink{
+		{ID: 1, URL: "https://wiki.example.com/spec", Title: "Spec"},
+		{ID: 2, URL: "https://ci.example.com/run/7", Title: "CI run"},
+	}
+
+	if _, _, err := e.run(t, "weblink", "PROJ-1"); err == nil {
+		t.Error("weblink without a URL accepted")
+	}
+	if _, _, err := e.run(t, "weblink", "--remove", "PROJ-1", "https://x.example.com", "title"); err == nil {
+		t.Error("--remove with a title accepted")
+	}
+
+	e.tty.picks = []pickChoice{{"CI run", ""}}
+	e.tty.answers = []string{"y"}
+	if _, _, err := e.run(t, "weblink", "--remove", "PROJ-1"); err != nil {
+		t.Fatal(err)
+	}
+	e.tty.answers = []string{"y"}
+	if _, _, err := e.run(t, "weblink", "PROJ-1", "--remove", "https://wiki.example.com/spec"); err != nil {
+		t.Fatal(err)
+	}
+	if rls := e.fake.Issues["PROJ-1"].RemoteLinks; len(rls) != 0 {
+		t.Errorf("web links left: %+v", rls)
+	}
+	if _, _, err := e.run(t, "weblink", "--remove", "PROJ-1"); err == nil || !strings.Contains(err.Error(), "no web links") {
+		t.Errorf("no web links: %v", err)
+	}
+}

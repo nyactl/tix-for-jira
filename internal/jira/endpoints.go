@@ -322,6 +322,14 @@ func (c *Client) CreateLink(ctx context.Context, typeName, subjectKey, objectKey
 	return c.do(ctx, http.MethodPost, "/rest/api/3/issueLink", nil, body, nil)
 }
 
+// DeleteLink removes an issue link by its ID.
+func (c *Client) DeleteLink(ctx context.Context, id string) error {
+	if n, err := strconv.ParseUint(id, 10, 64); err != nil || n == 0 {
+		return fmt.Errorf("invalid link ID %q", id)
+	}
+	return c.do(ctx, http.MethodDelete, "/rest/api/3/issueLink/"+id, nil, nil, nil)
+}
+
 // Projects lists projects the user may perform action on ("browse" or "create").
 func (c *Client) Projects(ctx context.Context, action string, limit int) ([]Project, error) {
 	return startAtPages(ctx, c, "/rest/api/3/project/search", url.Values{"action": {action}}, limit, func(b []byte) ([]Project, int, bool, error) {
@@ -476,4 +484,13 @@ func (c *Client) AddRemoteLink(ctx context.Context, key, linkURL, title string) 
 	}
 	body := map[string]any{"object": map[string]string{"url": linkURL, "title": title}}
 	return c.do(ctx, http.MethodPost, p, nil, body, nil)
+}
+
+// DeleteRemoteLink removes a web link from an issue by its ID.
+func (c *Client) DeleteRemoteLink(ctx context.Context, key string, id int) error {
+	p, err := issuePath(key, "/remotelink/", strconv.Itoa(id))
+	if err != nil {
+		return err
+	}
+	return c.do(ctx, http.MethodDelete, p, nil, nil, nil)
 }

@@ -345,6 +345,10 @@ func TestIntegration(t *testing.T) {
 		if _, err := s.svc.PlanWebLink(ctx, b, link, ""); err == nil {
 			t.Error("duplicate web link was accepted")
 		}
+		applied(t)(s.svc.PlanRemoveWebLink(ctx, b, link))
+		if d, _ := s.svc.Issue(ctx, b); len(d.WebLinks) != 0 {
+			t.Errorf("web links after removal = %+v", d.WebLinks)
+		}
 	})
 
 	t.Run("subtask", func(t *testing.T) {
@@ -735,6 +739,22 @@ func TestIntegration(t *testing.T) {
 		db, _ := s.svc.Issue(ctx, b)
 		if !hasLink(db.Links, "relates to", a) {
 			t.Errorf("links of %s = %+v", b, db.Links)
+		}
+	})
+
+	t.Run("unlink", func(t *testing.T) {
+		if _, err := s.svc.PlanUnlink(ctx, a, b, ""); err == nil || !strings.Contains(err.Error(), "more than once") {
+			t.Fatalf("ambiguous unlink: %v", err)
+		}
+		msg := applied(t)(s.svc.PlanUnlink(ctx, a, b, "blocks"))
+		if msg != fmt.Sprintf("Removed the link: %s blocks %s.", a, b) {
+			t.Errorf("result = %q", msg)
+		}
+		applied(t)(s.svc.PlanUnlink(ctx, b, a, ""))
+		da, _ := s.svc.Issue(ctx, a)
+		db, _ := s.svc.Issue(ctx, b)
+		if len(da.Links) != 0 || len(db.Links) != 0 {
+			t.Errorf("links left: %s=%+v %s=%+v", a, da.Links, b, db.Links)
 		}
 	})
 

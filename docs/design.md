@@ -51,14 +51,14 @@ Every write is built as a **plan** first: a human-readable description of exactl
 | Write | Kind |
 |---|---|
 | add comment, create issue, log work, link issues | additive |
-| update fields, transition | destructive |
+| update fields, transition, remove a link or web link | destructive |
 
 All writes need approval because even additive writes publish text under your name, which a prompt-injected assistant could misuse to leak data.
 
 - **MCP:** write tools are registered only with `tix mcp --allow-writes`. Each call returns an elicitation request (SEP-2322 input request; the SDK falls back to a server-initiated elicitation on older protocol versions) showing the plan. The assistant cannot answer an elicitation. The request state is single-use, expires after 10 minutes and is HMAC-bound to the exact tool arguments. Clients without elicitation support cannot write.
 - **CLI:** the confirmation is read from the controlling terminal, not stdin, so neither pipes nor an assistant running the command can answer it. Every write asks `y/N`, defaulting to no.
 
-Deleting issues, comments or worklogs is not supported.
+Deleting issues, comments or worklogs is not supported. Links and web links can be removed, as they are easy to add again: a link only from one of your tickets, though its other ticket may be out of scope, since it is shown there anyway.
 
 ## Credentials
 

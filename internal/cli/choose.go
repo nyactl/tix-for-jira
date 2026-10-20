@@ -107,6 +107,62 @@ func (a *App) status(ctx context.Context, svc *core.Service, key string, args []
 	return ts[k].Name, nil
 }
 
+func relatedLine(r core.Related) string {
+	line := fmt.Sprintf("%s %-10s [%s]", r.Relation, r.Key, r.Status)
+	if r.Summary != "" {
+		line += " " + r.Summary
+	}
+	return line
+}
+
+// link lets the user choose one of the ticket's links and returns the other
+// ticket and the relation.
+func (a *App) link(ctx context.Context, svc *core.Service, key string) (string, string, error) {
+	d, err := svc.Issue(ctx, key)
+	if err != nil {
+		return "", "", err
+	}
+	if len(d.Links) == 0 {
+		return "", "", fmt.Errorf("%s has no links", d.Key)
+	}
+	lines := make([]string, len(d.Links))
+	for k, l := range d.Links {
+		lines[k] = relatedLine(l)
+	}
+	k, err := a.choose(picker.Options{Title: "Remove a link of " + d.Key, Items: lines})
+	if errors.Is(err, errNoTerminal) {
+		return "", "", errors.New("give the other ticket key, or run this in a terminal to choose a link")
+	}
+	if err != nil {
+		return "", "", err
+	}
+	return d.Links[k].Key, d.Links[k].Relation, nil
+}
+
+// webLink lets the user choose one of the ticket's web links and returns its
+// URL.
+func (a *App) webLink(ctx context.Context, svc *core.Service, key string) (string, error) {
+	d, err := svc.Issue(ctx, key)
+	if err != nil {
+		return "", err
+	}
+	if len(d.WebLinks) == 0 {
+		return "", fmt.Errorf("%s has no web links", d.Key)
+	}
+	lines := make([]string, len(d.WebLinks))
+	for k, l := range d.WebLinks {
+		lines[k] = l.Title + "  " + l.URL
+	}
+	k, err := a.choose(picker.Options{Title: "Remove a web link of " + d.Key, Items: lines})
+	if errors.Is(err, errNoTerminal) {
+		return "", errors.New("give the URL, or run this in a terminal to choose a web link")
+	}
+	if err != nil {
+		return "", err
+	}
+	return d.WebLinks[k].URL, nil
+}
+
 func epicLine(e core.Related) string {
 	line := fmt.Sprintf("%-10s [%s]", e.Key, e.Status)
 	if e.Summary != "" {
@@ -188,6 +244,35 @@ func (a *App) completeParent(cmd *cobra.Command, args []string, toComplete strin
 func (a *App) completeCreateParent(cmd *cobra.Command, _ []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
 	project, _ := cmd.Flags().GetString("project")
 	return a.completeEpics(cmd, project, toComplete)
+}
+
+// completeUnlink completes a ticket key, then the tickets it is linked to,
+// then the relations between the two.
+func (a *App) completeUnlink(cmd *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
+	if len(args) == 0 {
+		return a.completeTickets(cmd, args, toComplete)
+	}
+	if len(args) > 2 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	svc, _, err := a.service(cmd)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveError
+	}
+	d, err := svc.Issue(cmd.Context(), args[0])
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveError
+	}
+	var out []cobra.Completion
+	for _, l := range d.Links {
+		switch {
+		case len(args) == 1 && strings.HasPrefix(strings.ToUpper(l.Key), strings.ToUpper(toComplete)):
+			out = append(out, cobra.CompletionWithDesc(l.Key, oneLine(strings.TrimSpace(l.Relation+", "+l.Status+" "+l.Summary))))
+		case len(args) == 2 && strings.EqualFold(l.Key, args[1]) && strings.HasPrefix(l.Relation, toComplete):
+			out = append(out, cobra.Completion(l.Relation))
+		}
+	}
+	return out, cobra.ShellCompDirectiveNoFileComp
 }
 
 // completeTickets completes ticket keys with the user's open tickets and
