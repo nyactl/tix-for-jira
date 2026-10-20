@@ -3,11 +3,13 @@ package mcpserver
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -393,5 +395,51 @@ func TestStructuredContentMatchesSchemas(t *testing.T) {
 		if strings.Contains(string(b), "Alice") || strings.Contains(string(b), "acc-alice") || strings.ContainsAny(string(b), "\x07\x1b") || strings.Contains(string(b), `\u001b`) || strings.Contains(string(b), `\u0007`) {
 			t.Errorf("%s: structured content is not redacted or sanitized: %s", name, b)
 		}
+	}
+}
+
+func TestDisconnectedReportsWhy(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	f := site(t)
+	rejected := errors.New("Jira rejected the API token (recorded expiry: 2026-10-19); then run `tix auth login`")
+	var fixed atomic.Bool
+	connect := func(ctx context.Context) (*core.Service, error) {
+		if !fixed.Load() {
+			return nil, rejected
+		}
+		return core.New(ctx, jira.New(f.URL(), "me@example.com", "tok-me", "test", atlassian.WithTransport(f.Transport())), config.PrivacyOwn)
+	}
+	srv := NewDisconnected(rejected, connect, "https://fake.example", config.PrivacyOwn, Options{Version: "test", AllowWrites: true, DownloadDir: t.TempDir()})
+	st, ct := mcp.NewInMemoryTransports()
+	if _, err := srv.Connect(ctx, st, nil); err != nil {
+		t.Fatal(err)
+	}
+	session, err := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1"}, nil).Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+	h := &harness{fake: f, session: session}
+
+	if instr := session.InitializeResult().Instructions; !strings.Contains(instr, "tix auth login") || !strings.Contains(instr, "Person A") {
+		t.Errorf("instructions: %s", instr)
+	}
+	tools := toolMap(t, h)
+	if tools["whoami"] == nil || tools["add_comment"] == nil {
+		t.Errorf("tools missing: %d offered", len(tools))
+	}
+	out, isErr := h.call(t, "whoami", nil)
+	if !isErr || !strings.Contains(out, "recorded expiry: 2026-10-19") || !strings.Contains(out, "tix auth login") {
+		t.Errorf("whoami while disconnected: %v %s", isErr, out)
+	}
+	if _, isErr := h.call(t, "add_comment", map[string]any{"key": "PROJ-1", "body": "x"}); !isErr || len(f.Issues["PROJ-1"].Comments) != 0 {
+		t.Error("a write went through while disconnected")
+	}
+
+	// After a new login, the next call connects.
+	fixed.Store(true)
+	if out, isErr := h.call(t, "whoami", nil); isErr || !strings.Contains(out, "Privacy: own") {
+		t.Errorf("whoami after the fix: %v %s", isErr, out)
 	}
 }
