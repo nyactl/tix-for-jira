@@ -220,3 +220,54 @@ func TestRemoveWebLink(t *testing.T) {
 		t.Errorf("no web links: %v", err)
 	}
 }
+
+func TestChooseTicketFirst(t *testing.T) {
+	e := newEnv(t).loggedIn(t)
+	e.fake.AddIssue(jiratest.Issue{Key: "PROJ-3", Summary: "Also mine", Assignee: "acc-me"})
+
+	// Ticket, relation and other ticket all chosen; someone else's ticket is never offered.
+	e.tty.picks = []pickChoice{{"PROJ-1", ""}, {"is blocked by", ""}, {"PROJ-3", ""}}
+	e.tty.answers = []string{"y"}
+	if _, _, err := e.run(t, "link"); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(strings.Join(e.tty.picked, "\n"), "PROJ-1 ") || strings.Contains(strings.Join(e.tty.picked, "\n"), "Not mine") {
+		t.Errorf("other-ticket picker offered %q", e.tty.picked)
+	}
+	if l := e.fake.Links; len(l) != 1 || l[0].Outward != "PROJ-3" || l[0].Inward != "PROJ-1" {
+		t.Fatalf("links %+v", l)
+	}
+
+	// The relation given, the ticket chosen.
+	e.tty.picks = []pickChoice{{"PROJ-3", ""}, {"PROJ-1", ""}}
+	e.tty.answers = []string{"y"}
+	if _, _, err := e.run(t, "link", "relates to"); err != nil || len(e.fake.Links) != 2 {
+		t.Fatalf("link with relation: %v, %+v", err, e.fake.Links)
+	}
+
+	e.tty.picks = []pickChoice{{"PROJ-3", ""}}
+	e.tty.answers = []string{"y"}
+	if _, _, err := e.run(t, "weblink", "https://ci.example.com/run/9", "CI run"); err != nil {
+		t.Fatal(err)
+	}
+	if rls := e.fake.Issues["PROJ-3"].RemoteLinks; len(rls) != 1 || rls[0].Title != "CI run" {
+		t.Errorf("web links %+v", rls)
+	}
+
+	e.tty.picks = []pickChoice{{"PROJ-3", ""}}
+	e.tty.answers = []string{"y"}
+	if _, _, err := e.run(t, "log", "30m"); err != nil {
+		t.Fatal(err)
+	}
+	if ws := e.fake.Issues["PROJ-3"].Worklogs; len(ws) != 1 {
+		t.Errorf("worklogs %+v", ws)
+	}
+	if _, _, err := e.run(t, "log", "PROJ-3"); err == nil || !strings.Contains(err.Error(), "give the time") {
+		t.Errorf("log without duration: %v", err)
+	}
+
+	e.tty.noTTY = true
+	if _, _, err := e.run(t, "link", "PROJ-1", "blocks"); err == nil || !strings.Contains(err.Error(), "give the other ticket key") {
+		t.Errorf("no terminal: %v", err)
+	}
+}

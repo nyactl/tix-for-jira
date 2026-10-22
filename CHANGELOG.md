@@ -4,6 +4,10 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ## Unreleased
 
+### Added
+
+- `tix link`, `tix log` and `tix weblink` let you choose the ticket when you leave out its key, as other commands already do: `tix log 30m`, `tix weblink URL`. `tix link` without arguments also lets you choose the relation and then the other ticket.
+
 ## [0.5.0] - 2026-10-22
 
 ### Added
