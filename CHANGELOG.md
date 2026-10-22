@@ -9,6 +9,7 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 - Put your tickets under epics that belong to someone else, by key: `tix parent KEY EPIC`, `tix update KEY --set Parent=EPIC` and `tix create --parent EPIC`. Such epics show only key, type and status.
 - `tix parent` without an epic offers the open epics your tickets already belong to, with their summaries; only this picker shows them, never output, completion or MCP. `tix parent KEY --remove` (or `--set Parent=`) takes a ticket out of its epic.
 - `tix epics` lists the open epics your tickets belong to; Tab completion offers them for `tix parent` and `tix create --parent`.
+- Remove links: `tix unlink KEY OTHER` and `tix weblink --remove KEY URL`, or choose one of the ticket's links without the last argument; MCP tools `unlink_issues` and `remove_web_link`. The other ticket of a link may be someone else's, as it is shown on your ticket anyway.
 
 ### Changed
 

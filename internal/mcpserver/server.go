@@ -67,7 +67,7 @@ func instructions(site string, mode config.PrivacyMode, writes bool) string {
 	}
 	b.WriteString("Mentions appear as @[label]. To mention someone in text you write, use the same @[label] form; only people shown before, in this or an earlier session, can be mentioned. Labels stay the same across sessions.\n\n")
 	if writes {
-		b.WriteString("Every change (comment, field update, transition, new ticket, work log, link) is shown to the user for approval before it happens. If the user declines, do not retry the same change unless asked.")
+		b.WriteString("Every change (comment, field update, transition, new ticket, work log, link, link removal) is shown to the user for approval before it happens. If the user declines, do not retry the same change unless asked.")
 	} else {
 		b.WriteString("This server is read-only; changes are not available.")
 	}
@@ -177,6 +177,11 @@ type webLinkInput struct {
 	Key   string `json:"key" jsonschema:"Ticket key, e.g. PROJ-123"`
 	URL   string `json:"url" jsonschema:"http or https URL"`
 	Title string `json:"title,omitempty" jsonschema:"Link text; defaults to the URL"`
+}
+
+type removeWebLinkInput struct {
+	Key string `json:"key" jsonschema:"Ticket key, e.g. PROJ-123"`
+	URL string `json:"url" jsonschema:"URL of the web link, as get_issue shows it"`
 }
 
 type attachInput struct {
@@ -409,6 +414,12 @@ type linkInput struct {
 	Other    string `json:"other_key" jsonschema:"Ticket key the relation points to"`
 }
 
+type unlinkInput struct {
+	Key      string `json:"key" jsonschema:"Ticket key the link is on"`
+	Other    string `json:"other_key" jsonschema:"Key of the linked ticket, as get_issue shows it"`
+	Relation string `json:"relation,omitempty" jsonschema:"Relation as get_issue shows it, e.g. blocks; needed only when the tickets are linked more than once"`
+}
+
 // approveThenApply shows the plan to the user via elicitation and applies
 // it only after approval.
 func (s *server) approveThenApply(ctx context.Context, req *mcp.CallToolRequest, tool string, args any, plan *core.Plan, err error) (*mcp.CallToolResult, any, error) {
@@ -477,6 +488,11 @@ func (s *server) registerWrites(srv *mcp.Server) {
 			p, err := s.svc.PlanLink(ctx, in.Key, in.Relation, in.Other)
 			return s.approveThenApply(ctx, req, "link_issues", in, p, err)
 		})
+	add(s, srv, "unlink_issues", "Remove a link between two tickets; the linked ticket may be one of someone else. The user approves it first.", writeAnnotations(core.Destructive),
+		func(ctx context.Context, req *mcp.CallToolRequest, in unlinkInput) (*mcp.CallToolResult, any, error) {
+			p, err := s.svc.PlanUnlink(ctx, in.Key, in.Other, in.Relation)
+			return s.approveThenApply(ctx, req, "unlink_issues", in, p, err)
+		})
 	add(s, srv, "assign_to_me", "Assign an unassigned ticket to the user, which brings it into scope. Tickets assigned to someone else are refused. The user approves it first.", writeAnnotations(core.Destructive),
 		func(ctx context.Context, req *mcp.CallToolRequest, in keyInput) (*mcp.CallToolResult, any, error) {
 			p, err := s.svc.PlanTake(ctx, in.Key)
@@ -496,6 +512,11 @@ func (s *server) registerWrites(srv *mcp.Server) {
 		func(ctx context.Context, req *mcp.CallToolRequest, in webLinkInput) (*mcp.CallToolResult, any, error) {
 			p, err := s.svc.PlanWebLink(ctx, in.Key, in.URL, in.Title)
 			return s.approveThenApply(ctx, req, "add_web_link", in, p, err)
+		})
+	add(s, srv, "remove_web_link", "Remove a web link from a ticket. The user approves it first.", writeAnnotations(core.Destructive),
+		func(ctx context.Context, req *mcp.CallToolRequest, in removeWebLinkInput) (*mcp.CallToolResult, any, error) {
+			p, err := s.svc.PlanRemoveWebLink(ctx, in.Key, in.URL)
+			return s.approveThenApply(ctx, req, "remove_web_link", in, p, err)
 		})
 	add(s, srv, "attach_file", "Upload a local file the user named to a ticket. The user approves the file name, size and path first.", writeAnnotations(core.Additive),
 		func(ctx context.Context, req *mcp.CallToolRequest, in attachInput) (*mcp.CallToolResult, any, error) {

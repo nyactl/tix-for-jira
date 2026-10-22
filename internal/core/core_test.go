@@ -501,6 +501,46 @@ func TestPlanLink(t *testing.T) {
 	}
 }
 
+func TestPlanUnlink(t *testing.T) {
+	t.Parallel()
+	f := fixture(t)
+	f.Links = append(f.Links, jiratest.Link{ID: "901", Type: "Relates", Outward: "PROJ-1", Inward: "PROJ-2"})
+	s := service(t, f, config.PrivacyOwn)
+	ctx := context.Background()
+
+	for _, tc := range []struct{ key, other, relation, want string }{
+		{"PROJ-1", "PROJ-2", "", "more than once; give the relation: blocks, relates to"},
+		{"PROJ-1", "PROJ-2", "is blocked by", `not linked to PROJ-2 with "is blocked by"; it blocks and relates to PROJ-2`},
+		{"PROJ-1", "PROJ-3", "", "PROJ-1 is not linked to PROJ-3"},
+		{"PROJ-2", "PROJ-1", "", ErrNotFound.Error()},
+		{"PROJ-1", "nope", "", "invalid"},
+	} {
+		if _, err := s.PlanUnlink(ctx, tc.key, tc.other, tc.relation); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s %s %q: err = %v, want %q", tc.key, tc.other, tc.relation, err, tc.want)
+		}
+	}
+
+	// The other ticket is outside the scope; it is named as on PROJ-1.
+	p, err := s.PlanUnlink(ctx, "PROJ-1", "proj-2", "blocks")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Kind != Destructive || p.Description != "Remove the link: PROJ-1 (Fix login for Person A) blocks PROJ-2 (Task, To Do)." || strings.Contains(p.Description, "secret") {
+		t.Errorf("plan = %s %q", p.Kind, p.Description)
+	}
+	assertNoPersonalData(t, p.Description)
+	msg, err := p.Apply(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if msg != "Removed the link: PROJ-1 blocks PROJ-2." || len(f.Links) != 1 || f.Links[0].ID != "901" {
+		t.Errorf("msg = %q links = %+v", msg, f.Links)
+	}
+	if p, err = s.PlanUnlink(ctx, "PROJ-1", "PROJ-2", ""); err != nil || !strings.Contains(p.Description, "relates to PROJ-2") {
+		t.Errorf("single remaining link: %v", err)
+	}
+}
+
 func TestCommentsAndWorklogsKeepTheNewest(t *testing.T) {
 	t.Parallel()
 	f := fixture(t)
@@ -919,6 +959,31 @@ func TestWebLinks(t *testing.T) {
 		if _, err := s.PlanWebLink(ctx, tc.key, tc.url, tc.title); err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s %s: err = %v, want %q", tc.key, tc.url, err, tc.want)
 		}
+	}
+
+	for _, tc := range []struct{ key, url, want string }{
+		{"PROJ-1", "https://ci.example.com/run/9", "PROJ-1 has no web link to https://ci.example.com/run/9"},
+		{"PROJ-1", "javascript:alert(1)", "no web link"},
+		{"PROJ-2", "https://wiki.example.com/spec", ErrNotFound.Error()},
+	} {
+		if _, err := s.PlanRemoveWebLink(ctx, tc.key, tc.url); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("remove %s %s: err = %v, want %q", tc.key, tc.url, err, tc.want)
+		}
+	}
+	p, err = s.PlanRemoveWebLink(ctx, "PROJ-1", " https://wiki.example.com/spec ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Kind != Destructive || !strings.Contains(p.Description, "Remove the web link from PROJ-1 (Fix login for Person A):\n\n    Spec by Person A\n    https://wiki.example.com/spec") {
+		t.Errorf("plan = %s %q", p.Kind, p.Description)
+	}
+	assertNoPersonalData(t, p.Description)
+	if _, err := p.Apply(ctx); err != nil {
+		t.Fatal(err)
+	}
+	d, _ = s.Issue(ctx, "PROJ-1")
+	if len(d.WebLinks) != 1 || d.WebLinks[0].Title != "CI run" || len(f.Issues["PROJ-1"].RemoteLinks) != 2 {
+		t.Errorf("after remove = %+v", d.WebLinks)
 	}
 }
 

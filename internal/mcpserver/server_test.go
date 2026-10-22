@@ -107,7 +107,7 @@ func toolMap(t *testing.T, h *harness) map[string]*mcp.Tool {
 	return m
 }
 
-var writeTools = []string{"add_comment", "add_web_link", "assign_to_me", "attach_file", "create_issue", "link_issues", "log_work", "move_to_sprint", "transition_issue", "unwatch_issue", "update_fields", "watch_issue"}
+var writeTools = []string{"add_comment", "add_web_link", "assign_to_me", "attach_file", "create_issue", "link_issues", "log_work", "move_to_sprint", "remove_web_link", "transition_issue", "unlink_issues", "unwatch_issue", "update_fields", "watch_issue"}
 
 func TestReadOnlyByDefault(t *testing.T) {
 	t.Parallel()
@@ -138,7 +138,7 @@ func TestWriteToolAnnotations(t *testing.T) {
 			t.Errorf("%s missing", name)
 			continue
 		}
-		wantDestructive := name == "update_fields" || name == "transition_issue" || name == "assign_to_me" || name == "unwatch_issue" || name == "move_to_sprint"
+		wantDestructive := name == "update_fields" || name == "transition_issue" || name == "assign_to_me" || name == "unwatch_issue" || name == "move_to_sprint" || name == "unlink_issues" || name == "remove_web_link"
 		a := tool.Annotations
 		if a == nil || a.ReadOnlyHint || a.DestructiveHint == nil || *a.DestructiveHint != wantDestructive {
 			t.Errorf("%s annotations = %+v", name, a)
@@ -185,6 +185,26 @@ func TestWriteNeedsApproval(t *testing.T) {
 		if n := len(h.fake.Issues["PROJ-1"].Comments); n != 1 {
 			t.Errorf("protocol %q: %d comments stored", protocol, n)
 		}
+	}
+}
+
+func TestRemoveLinks(t *testing.T) {
+	t.Parallel()
+	h := connect(t, true, config.PrivacyOwn, "approve", "")
+	h.fake.Links = append(h.fake.Links, jiratest.Link{ID: "900", Type: "Blocks", Outward: "PROJ-1", Inward: "PROJ-2"})
+	h.fake.Issues["PROJ-1"].RemoteLinks = []jiratest.RemoteLink{{ID: 1, URL: "https://wiki.example.com/spec", Title: "Spec"}}
+
+	if out, isErr := h.call(t, "unlink_issues", map[string]any{"key": "PROJ-1", "other_key": "PROJ-2"}); isErr {
+		t.Fatal(out)
+	}
+	if out, isErr := h.call(t, "remove_web_link", map[string]any{"key": "PROJ-1", "url": "https://wiki.example.com/spec"}); isErr {
+		t.Fatal(out)
+	}
+	if len(h.asked) != 2 || !strings.Contains(h.asked[0], "Remove the link: PROJ-1") || !strings.Contains(h.asked[1], "Remove the web link from PROJ-1") {
+		t.Errorf("asked %q", h.asked)
+	}
+	if len(h.fake.Links) != 0 || len(h.fake.Issues["PROJ-1"].RemoteLinks) != 0 {
+		t.Errorf("left: %+v %+v", h.fake.Links, h.fake.Issues["PROJ-1"].RemoteLinks)
 	}
 }
 
