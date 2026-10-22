@@ -115,30 +115,33 @@ func epicLine(e core.Related) string {
 	return line
 }
 
-// projectOf returns the project part of a ticket key.
-func projectOf(key string) string {
-	p, _, _ := strings.Cut(strings.ToUpper(strings.TrimSpace(key)), "-")
-	return p
-}
+// noEpics explains where other epics come from.
+const noEpics = "none of your tickets is in an open epic%s yet; give the epic's key, as shown in Jira"
 
 // epic returns the epic key in args at i, or lets the user choose one of
-// the open epics of project.
+// the open epics their tickets belong to. Only the picker shows the epics'
+// summaries: it draws on the terminal, which commands started by an
+// assistant cannot open.
 func (a *App) epic(ctx context.Context, svc *core.Service, project string, args []string, i int) (string, error) {
 	if len(args) > i {
 		return args[i], nil
 	}
-	es, err := svc.Epics(ctx, project, 200)
+	es, err := svc.MyEpicsForPicker(ctx, project)
 	if err != nil {
 		return "", err
 	}
 	if len(es) == 0 {
-		return "", fmt.Errorf("%s has no open epics", project)
+		in := ""
+		if project != "" {
+			in = " of " + strings.ToUpper(project)
+		}
+		return "", fmt.Errorf(noEpics, in)
 	}
 	lines := make([]string, len(es))
 	for k, e := range es {
 		lines[k] = epicLine(e)
 	}
-	k, err := a.choose(picker.Options{Title: "Choose an epic in " + project, Items: lines})
+	k, err := a.choose(picker.Options{Title: "Choose an epic", Items: lines})
 	if errors.Is(err, errNoTerminal) {
 		return "", errors.New("give the epic key, or run this in a terminal to choose one")
 	}
@@ -148,48 +151,42 @@ func (a *App) epic(ctx context.Context, svc *core.Service, project string, args 
 	return es[k].Key, nil
 }
 
+// completeEpics completes the epics the user's tickets belong to, without
+// summaries: assistants can run completion too.
 func (a *App) completeEpics(cmd *cobra.Command, project, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
 	svc, _, err := a.service(cmd)
-	if err != nil || project == "" {
+	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveError
 	}
-	es, err := svc.Epics(cmd.Context(), project, 200)
+	es, err := svc.MyEpics(cmd.Context(), project)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveError
 	}
 	var out []cobra.Completion
 	for _, e := range es {
 		if strings.HasPrefix(strings.ToUpper(e.Key), strings.ToUpper(toComplete)) {
-			out = append(out, cobra.CompletionWithDesc(e.Key, oneLine(strings.TrimSpace(e.Status+" "+e.Summary))))
+			out = append(out, cobra.CompletionWithDesc(e.Key, oneLine(strings.TrimSpace(e.Type+", "+e.Status+" "+e.Summary))))
 		}
 	}
 	return out, cobra.ShellCompDirectiveNoFileComp
 }
 
-// completeParent completes a ticket key, then the epics of its project.
+// completeParent completes a ticket key, then the epics of the user's
+// tickets.
 func (a *App) completeParent(cmd *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
-	switch len(args) {
-	case 0:
+	if len(args) == 0 {
 		return a.completeTickets(cmd, args, toComplete)
-	case 1:
-		project, _ := cmd.Flags().GetString("project")
-		if project == "" {
-			project = projectOf(args[0])
-		}
-		return a.completeEpics(cmd, project, toComplete)
 	}
-	return nil, cobra.ShellCompDirectiveNoFileComp
+	if len(args) > 1 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	project, _ := cmd.Flags().GetString("project")
+	return a.completeEpics(cmd, project, toComplete)
 }
 
-// completeCreateParent completes --parent of tix create with the epics of
-// the project being created in.
+// completeCreateParent completes --parent of tix create.
 func (a *App) completeCreateParent(cmd *cobra.Command, _ []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
 	project, _ := cmd.Flags().GetString("project")
-	if project == "" {
-		if _, cfg, err := a.service(cmd); err == nil {
-			project = cfg.DefaultProject
-		}
-	}
 	return a.completeEpics(cmd, project, toComplete)
 }
 

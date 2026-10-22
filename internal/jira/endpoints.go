@@ -335,22 +335,6 @@ func (c *Client) Projects(ctx context.Context, action string, limit int) ([]Proj
 	})
 }
 
-// ProjectIssueTypes lists every issue type of a project, including the
-// ones the user may not create.
-func (c *Client) ProjectIssueTypes(ctx context.Context, projectKey string) ([]IssueType, error) {
-	pk, err := NormalizeProjectKey(projectKey)
-	if err != nil {
-		return nil, err
-	}
-	var p struct {
-		IssueTypes []IssueType `json:"issueTypes"`
-	}
-	if err := c.do(ctx, http.MethodGet, "/rest/api/3/project/"+pk, nil, nil, &p); err != nil {
-		return nil, err
-	}
-	return p.IssueTypes, nil
-}
-
 // Fields lists every field visible to the user.
 func (c *Client) Fields(ctx context.Context) ([]Field, error) {
 	var out []Field

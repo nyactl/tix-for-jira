@@ -88,24 +88,54 @@ func TestMentionsAcrossCommands(t *testing.T) {
 func TestParent(t *testing.T) {
 	e := newEnv(t).loggedIn(t)
 	e.fake.AddIssue(jiratest.Issue{Key: "PROJ-10", Type: "Epic", Summary: "Checkout redesign", Assignee: "acc-alice"})
-	e.fake.AddIssue(jiratest.Issue{Key: "PROJ-11", Type: "Epic", Summary: "Shipped", Assignee: "acc-alice", Status: "Done"})
+	e.fake.AddIssue(jiratest.Issue{Key: "PROJ-11", Type: "Epic", Summary: "Unrelated epic", Assignee: "acc-alice"})
+	e.fake.AddIssue(jiratest.Issue{Key: "PROJ-3", Summary: "Also mine", Assignee: "acc-me"})
 
-	out, _, err := e.run(t, "epics", "--project", "PROJ")
-	if err != nil || !strings.Contains(out, "- PROJ-10 [Epic, To Do]") || strings.Contains(out, "Checkout") || strings.Contains(out, "PROJ-11") {
-		t.Errorf("epics: %q, %v", out, err)
+	// No ticket of yours is in an epic yet: other epics need their key.
+	e.tty.picks = []pickChoice{{"PROJ-1", ""}}
+	if _, _, err := e.run(t, "parent"); err == nil || !strings.Contains(err.Error(), "give the epic's key") {
+		t.Fatalf("parent without epics: %v", err)
 	}
-
-	// Choose the ticket and the epic.
-	e.tty.picks = []pickChoice{{"PROJ-1", ""}, {"PROJ-10", ""}}
 	e.tty.answers = []string{"y"}
-	if _, _, err := e.run(t, "parent"); err != nil {
+	if _, _, err := e.run(t, "parent", "PROJ-1", "PROJ-10"); err != nil {
 		t.Fatal(err)
 	}
 	if got := e.fake.Issues["PROJ-1"].Parent; got != "PROJ-10" {
 		t.Fatalf("parent %q", got)
 	}
-	if !strings.Contains(e.tty.asked[len(e.tty.asked)-1], `to:   "PROJ-10 (Epic, To Do)"`) {
-		t.Errorf("asked %q", e.tty.asked[len(e.tty.asked)-1])
+	if q := e.tty.asked[len(e.tty.asked)-1]; !strings.Contains(q, `to:   "PROJ-10 (Epic, To Do)"`) || strings.Contains(q, "Checkout") {
+		t.Errorf("asked %q", q)
+	}
+
+	// Now the picker offers that epic, with its summary, and nothing else.
+	e.tty.picks = []pickChoice{{"PROJ-3", ""}, {"Checkout", ""}}
+	e.tty.answers = []string{"y"}
+	if _, _, err := e.run(t, "parent"); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.fake.Issues["PROJ-3"].Parent; got != "PROJ-10" {
+		t.Fatalf("parent of PROJ-3 %q", got)
+	}
+	if offered := strings.Join(e.tty.picked, "\n"); !strings.Contains(offered, "PROJ-10    [To Do] Checkout redesign") || strings.Contains(offered, "PROJ-11") {
+		t.Errorf("offered %q", offered)
+	}
+
+	// Output and completion never show the summaries of other people's epics.
+	out, _, err := e.run(t, "epics")
+	if err != nil || !strings.Contains(out, "- PROJ-10 [Epic, To Do]") || strings.Contains(out, "Checkout") || strings.Contains(out, "PROJ-11") {
+		t.Errorf("epics: %q, %v", out, err)
+	}
+	out, _, _ = e.run(t, "epics", "--json")
+	if strings.Contains(out, "Checkout") {
+		t.Errorf("epics --json: %q", out)
+	}
+	out, _, _ = e.run(t, "__complete", "parent", "PROJ-1", "")
+	if !strings.Contains(out, "PROJ-10\tEpic, To Do") || strings.Contains(out, "Checkout") || strings.Contains(out, "PROJ-11") {
+		t.Errorf("epic completion: %q", out)
+	}
+	out, _, _ = e.run(t, "__complete", "create", "--parent", "")
+	if !strings.Contains(out, "PROJ-10\t") || strings.Contains(out, "Checkout") {
+		t.Errorf("--parent completion: %q", out)
 	}
 
 	e.tty.answers = []string{"y"}
@@ -118,34 +148,7 @@ func TestParent(t *testing.T) {
 	if _, _, err := e.run(t, "parent", "PROJ-1", "PROJ-10", "--remove"); err == nil {
 		t.Error("--remove with an epic accepted")
 	}
-
-	out, _, _ = e.run(t, "__complete", "parent", "PROJ-1", "")
-	if !strings.Contains(out, "PROJ-10\tTo Do") || strings.Contains(out, "PROJ-11") {
-		t.Errorf("epic completion: %q", out)
-	}
-	out, _, _ = e.run(t, "__complete", "create", "--project", "PROJ", "--parent", "")
-	if !strings.Contains(out, "PROJ-10\t") {
-		t.Errorf("--parent completion: %q", out)
-	}
-
-	// Summaries need a confirmed opt-in.
-	e.tty.answers = []string{"yes"}
-	if _, _, err := e.run(t, "config", "epic-summaries", "on"); err == nil {
-		t.Fatal("epic summaries switched on without typing on")
-	}
-	e.tty.answers = []string{"on"}
-	if _, _, err := e.run(t, "config", "epic-summaries", "on"); err != nil {
-		t.Fatal(err)
-	}
-	out, _, _ = e.run(t, "epics", "--project", "PROJ")
-	if !strings.Contains(out, "- PROJ-10 [Epic, To Do] Checkout redesign") {
-		t.Errorf("epics with summaries: %q", out)
-	}
-	if _, _, err := e.run(t, "config", "epic-summaries", "off"); err != nil {
-		t.Fatal(err)
-	}
-	out, _, _ = e.run(t, "epics", "--project", "PROJ")
-	if strings.Contains(out, "Checkout") {
-		t.Errorf("epics after off: %q", out)
+	if out, _, _ := e.run(t, "config", "--help"); strings.Contains(out, "epic") {
+		t.Errorf("config offers an epic setting: %q", out)
 	}
 }

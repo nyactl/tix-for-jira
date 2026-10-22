@@ -85,7 +85,7 @@ func (a *App) authCmd() *cobra.Command {
 				cfg.Privacy = prev.Privacy
 				cfg.AllowDevBuilds = prev.AllowDevBuilds && prev.Site == cfg.Site
 				if prev.Site == cfg.Site {
-					cfg.Searches, cfg.DefaultProject, cfg.EpicSummaries = prev.Searches, prev.DefaultProject, prev.EpicSummaries
+					cfg.Searches, cfg.DefaultProject = prev.Searches, prev.DefaultProject
 				}
 			}
 			if err := cfg.Validate(); err != nil {
@@ -201,8 +201,8 @@ func (a *App) configCmd() *cobra.Command {
 				if cfg.ScopedToken {
 					token = "scoped (via the Atlassian API gateway, cloud ID " + cfg.CloudID + ")"
 				}
-				return fmt.Sprintf("- Profile: %s\n- Site: %s\n- Email: %s\n- Token: %s\n- Privacy: %s\n- Default project: %s\n- Epic summaries: %v\n- Saved searches: %d\n- Token expiry: %s\n- Development builds: %v\n- File: %s\n",
-					prof, cfg.Site, cfg.Email, token, cfg.Privacy, orDash(cfg.DefaultProject), cfg.EpicSummaries, len(cfg.Searches), orDash(cfg.TokenExpiry), cfg.AllowDevBuilds, path)
+				return fmt.Sprintf("- Profile: %s\n- Site: %s\n- Email: %s\n- Token: %s\n- Privacy: %s\n- Default project: %s\n- Saved searches: %d\n- Token expiry: %s\n- Development builds: %v\n- File: %s\n",
+					prof, cfg.Site, cfg.Email, token, cfg.Privacy, orDash(cfg.DefaultProject), len(cfg.Searches), orDash(cfg.TokenExpiry), cfg.AllowDevBuilds, path)
 			})
 		},
 	}
@@ -326,48 +326,7 @@ func (a *App) configCmd() *cobra.Command {
 			return err
 		},
 	}
-	epicSummaries := &cobra.Command{
-		Use:   "epic-summaries on|off",
-		Short: "Show the summaries of other people's epics in privacy mode own",
-		Long: "In privacy mode own, epics of other people show only their key, type and status, which is enough to put\n" +
-			"your tickets under them but hard to choose from. With on, they also show their summary, with known names\n" +
-			"replaced; nothing else of them is read. Switching on must be confirmed in the terminal. Restart MCP clients afterwards.",
-		Args:      cobra.ExactArgs(1),
-		ValidArgs: []string{"on", "off"},
-		RunE: func(cmd *cobra.Command, args []string) error {
-			prof, err := a.profile(cmd)
-			if err != nil {
-				return err
-			}
-			cfg, err := config.Load(prof)
-			if err != nil {
-				return err
-			}
-			switch strings.ToLower(args[0]) {
-			case "on":
-				if !cfg.EpicSummaries {
-					answer, err := a.TTY.Prompt(target(cfg.Site, prof) + "\n\nAssistants will see the summaries of other people's epics.\nType on to confirm: ")
-					if err != nil {
-						return err
-					}
-					if answer != "on" {
-						return errors.New("not confirmed; nothing was changed")
-					}
-				}
-				cfg.EpicSummaries = true
-			case "off":
-				cfg.EpicSummaries = false
-			default:
-				return fmt.Errorf("use on or off, not %q", args[0])
-			}
-			if err := cfg.Save(prof); err != nil {
-				return err
-			}
-			_, err = fmt.Fprintf(a.Out, "Epic summaries: %v. Restart MCP clients to apply it.\n", cfg.EpicSummaries)
-			return err
-		},
-	}
-	cmd.AddCommand(show, privacy, profiles, devBuilds, epicSummaries, a.searchConfigCmd(), a.projectConfigCmd())
+	cmd.AddCommand(show, privacy, profiles, devBuilds, a.searchConfigCmd(), a.projectConfigCmd())
 	return cmd
 }
 

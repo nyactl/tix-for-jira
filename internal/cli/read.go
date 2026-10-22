@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
@@ -171,28 +170,24 @@ func (a *App) addReadCommands(root *cobra.Command) {
 
 	epics := &cobra.Command{
 		Use:   "epics",
-		Short: "List the open epics of a project, to put tickets under with `tix parent`",
-		Args:  cobra.NoArgs,
+		Short: "List the open epics your tickets belong to",
+		Long: "List the open epics your tickets belong to, most recently used first, with key, type and status.\n" +
+			"To put a ticket under another epic, give its key: tix parent KEY EPIC.",
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			svc, cfg, err := a.service(cmd)
+			svc, _, err := a.service(cmd)
 			if err != nil {
 				return err
 			}
 			project, _ := cmd.Flags().GetString("project")
-			if project == "" {
-				project = cfg.DefaultProject
-			}
-			if project == "" {
-				return errors.New("name the project with --project, or set a default with `tix config project KEY`")
-			}
-			es, err := svc.Epics(cmd.Context(), project, 200)
+			es, err := svc.MyEpics(cmd.Context(), project)
 			if err != nil {
 				return err
 			}
 			return a.print(cmd, es, func() string { return render.Epics(es) })
 		},
 	}
-	epics.Flags().String("project", "", "project key (default: the profile's default project)")
+	epics.Flags().String("project", "", "only epics of this project")
 
 	whoami := noArgCmd(a, "whoami", "Show your account, site and privacy mode", func(cmd *cobra.Command, svc *core.Service) error {
 		me, err := svc.Whoami(cmd.Context())
