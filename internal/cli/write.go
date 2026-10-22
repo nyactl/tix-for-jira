@@ -243,9 +243,10 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 	_ = create.MarkFlagRequired("summary")
 
 	logWork := &cobra.Command{
-		Use:   "log <key> <duration>",
+		Use:   "log [key] <duration>",
 		Short: "Log time, e.g. tix log PROJ-1 1h30m --started 09:00",
-		Args:  cobra.ExactArgs(2),
+		Long:  "Log time on a ticket. Without the key, choose one of your tickets.",
+		Args:  cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			started, _ := cmd.Flags().GetString("started")
 			c, err := textArg(cmd, "comment")
@@ -256,7 +257,14 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 			if err != nil {
 				return err
 			}
-			p, err := svc.PlanWorklog(cmd.Context(), args[0], args[1], started, c)
+			key, rest, err := a.ticketFirst(cmd.Context(), svc, args)
+			if err != nil {
+				return err
+			}
+			if len(rest) != 1 {
+				return errors.New("give the time to log, e.g. 1h30m")
+			}
+			p, err := svc.PlanWorklog(cmd.Context(), key, rest[0], started, c)
 			return a.apply(cmd, svc, p, err)
 		},
 	}
@@ -264,15 +272,35 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 	logWork.Flags().String("comment", "", "work description, or - for stdin")
 
 	link := &cobra.Command{
-		Use:   "link <key> <relation> <other-key>",
+		Use:   "link [key] [relation] [other-key]",
 		Short: `Link tickets, e.g. tix link PROJ-1 "is blocked by" PROJ-2`,
-		Args:  cobra.ExactArgs(3),
+		Long: "Link one of your tickets to another of your tickets.\n" +
+			"Leave out the key, the relation or the other key to choose them.",
+		Args: cobra.MaximumNArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			svc, _, err := a.service(cmd)
 			if err != nil {
 				return err
 			}
-			p, err := svc.PlanLink(cmd.Context(), args[0], args[1], args[2])
+			key, rest, err := a.ticketFirst(cmd.Context(), svc, args)
+			if err != nil {
+				return err
+			}
+			relation, other := "", ""
+			if len(rest) > 0 {
+				relation = rest[0]
+			} else if relation, err = a.relation(cmd.Context(), svc, key); err != nil {
+				return err
+			}
+			if len(rest) > 1 {
+				other = rest[1]
+			} else if other, err = a.otherTicket(cmd.Context(), svc, key, "Link "+strings.ToUpper(key)+" "+relation); err != nil {
+				return err
+			}
+			if len(rest) > 2 {
+				return errors.New("too many arguments: give the key, the relation and the other key")
+			}
+			p, err := svc.PlanLink(cmd.Context(), key, relation, other)
 			return a.apply(cmd, svc, p, err)
 		},
 	}
@@ -339,36 +367,42 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 	}
 
 	weblink := &cobra.Command{
-		Use:   "weblink <key> <url> [title]",
+		Use:   "weblink [key] <url> [title]",
 		Short: "Add or remove a web link of a ticket",
 		Long: "Add a web link to a ticket.\n" +
-			"With --remove, remove the ticket's web link to the URL; without the URL, choose one of its web links.",
-		Args: func(cmd *cobra.Command, args []string) error {
-			if remove, _ := cmd.Flags().GetBool("remove"); remove {
-				return cobra.RangeArgs(1, 2)(cmd, args)
-			}
-			return cobra.RangeArgs(2, 3)(cmd, args)
-		},
+			"With --remove, remove the ticket's web link to the URL; without the URL, choose one of its web links.\n" +
+			"Without the key, choose one of your tickets.",
+		Args: cobra.MaximumNArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			svc, _, err := a.service(cmd)
 			if err != nil {
 				return err
 			}
+			key, rest, err := a.ticketFirst(cmd.Context(), svc, args)
+			if err != nil {
+				return err
+			}
 			if remove, _ := cmd.Flags().GetBool("remove"); remove {
+				if len(rest) > 1 {
+					return errors.New("--remove takes the key and the URL, not a title")
+				}
 				u := ""
-				if len(args) > 1 {
-					u = args[1]
-				} else if u, err = a.webLink(cmd.Context(), svc, args[0]); err != nil {
+				if len(rest) == 1 {
+					u = rest[0]
+				} else if u, err = a.webLink(cmd.Context(), svc, key); err != nil {
 					return err
 				}
-				p, err := svc.PlanRemoveWebLink(cmd.Context(), args[0], u)
+				p, err := svc.PlanRemoveWebLink(cmd.Context(), key, u)
 				return a.apply(cmd, svc, p, err)
 			}
-			title := ""
-			if len(args) == 3 {
-				title = args[2]
+			if len(rest) == 0 || len(rest) > 2 {
+				return errors.New("give the URL and optionally a title")
 			}
-			p, err := svc.PlanWebLink(cmd.Context(), args[0], args[1], title)
+			title := ""
+			if len(rest) == 2 {
+				title = rest[1]
+			}
+			p, err := svc.PlanWebLink(cmd.Context(), key, rest[0], title)
 			return a.apply(cmd, svc, p, err)
 		},
 	}

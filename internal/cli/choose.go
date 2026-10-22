@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -11,6 +12,7 @@ import (
 	"github.com/nyactl/approvekit/picker"
 
 	"github.com/nyactl/tix-for-jira/internal/core"
+	"github.com/nyactl/tix-for-jira/internal/jira"
 )
 
 // Chooser lets the user choose a line by typing part of it, and read longer
@@ -75,6 +77,75 @@ func (a *App) ticket(ctx context.Context, svc *core.Service, args []string, i in
 		return "", err
 	}
 	return list[k].Key, nil
+}
+
+// ticketFirst returns the ticket key leading args and the arguments after
+// it. When args do not start with a ticket key, the user chooses one of
+// their tickets and all of args follow it.
+func (a *App) ticketFirst(ctx context.Context, svc *core.Service, args []string) (string, []string, error) {
+	if len(args) > 0 {
+		if _, err := jira.NormalizeKey(args[0]); err == nil {
+			return args[0], args[1:], nil
+		}
+	}
+	key, err := a.ticket(ctx, svc, nil, 0)
+	return key, args, err
+}
+
+// otherTicket lets the user choose one of their open tickets other than key.
+func (a *App) otherTicket(ctx context.Context, svc *core.Service, key, title string) (string, error) {
+	list, err := svc.MyIssues(ctx, core.MyIssuesOptions{Max: 200})
+	if err != nil {
+		return "", err
+	}
+	var others []core.IssueSummary
+	for _, is := range list {
+		if !strings.EqualFold(is.Key, key) {
+			others = append(others, is)
+		}
+	}
+	if len(others) == 0 {
+		return "", errors.New("you have no other open tickets; give the other ticket key")
+	}
+	lines := make([]string, len(others))
+	for k, is := range others {
+		lines[k] = ticketLine(is)
+	}
+	k, err := a.choose(picker.Options{Title: title, Items: lines})
+	if errors.Is(err, errNoTerminal) {
+		return "", errors.New("give the other ticket key, or run this in a terminal to choose one")
+	}
+	if err != nil {
+		return "", err
+	}
+	return others[k].Key, nil
+}
+
+// relation lets the user choose a link relation for key.
+func (a *App) relation(ctx context.Context, svc *core.Service, key string) (string, error) {
+	lts, err := svc.LinkTypes(ctx)
+	if err != nil {
+		return "", err
+	}
+	var phrases []string
+	for _, lt := range lts {
+		for _, p := range []string{lt.Outward, lt.Inward} {
+			if p != "" && !slices.Contains(phrases, p) {
+				phrases = append(phrases, p)
+			}
+		}
+	}
+	if len(phrases) == 0 {
+		return "", errors.New("the site has no link types")
+	}
+	k, err := a.choose(picker.Options{Title: strings.ToUpper(key) + " ...", Items: phrases})
+	if errors.Is(err, errNoTerminal) {
+		return "", errors.New("give the relation, or run this in a terminal to choose one; see tix link-types")
+	}
+	if err != nil {
+		return "", err
+	}
+	return phrases[k], nil
 }
 
 // status returns the status or transition in args at i, or lets the user

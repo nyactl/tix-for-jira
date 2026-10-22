@@ -109,7 +109,7 @@ tix attach PROJ-123 ./screenshot.png   # upload a file (up to 50 MiB)
 tix sprint move PROJ-123 "Sprint 12"   # or: tix sprint move PROJ-123 backlog
 ```
 
-**Choosing instead of typing:** leave out the ticket key, as in `tix show`, `tix comment --body "…"` or `tix transition`, and a picker lists your open tickets: type part of the key or summary, move with the arrow keys, press Enter. `tix transition` without a status lets you choose one of the ticket's status changes the same way, and `tix parent` without an epic one of the open epics your tickets already belong to (other epics by key).
+**Choosing instead of typing:** leave out the ticket key, as in `tix show`, `tix comment --body "…"` or `tix transition`, and a picker lists your open tickets: type part of the key or summary, move with the arrow keys, press Enter. `tix transition` without a status lets you choose one of the ticket's status changes the same way, and `tix parent` without an epic one of the open epics your tickets already belong to (other epics by key). `tix link` without arguments asks for the ticket, the relation and the other ticket; `tix log 30m` and `tix weblink URL` ask only for the ticket.
 
 ![tix transition without arguments: choose the ticket, then the status, by typing part of them](docs/pick.gif)
 
