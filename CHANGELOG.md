@@ -4,6 +4,8 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ## Unreleased
 
+## [0.5.0] - 2026-10-22
+
 ### Added
 
 - Put your tickets under epics that belong to someone else, by key: `tix parent KEY EPIC`, `tix update KEY --set Parent=EPIC` and `tix create --parent EPIC`. Such epics show only key, type and status.
@@ -96,6 +98,7 @@ First release, tested against Jira Cloud with a non-admin account.
 - Markdown <-> Atlassian Document Format conversion with `@[label]` mentions.
 - Profiles (`--profile`, `TIX_JIRA_PROFILE`) to switch between sites; development builds require an explicit profile.
 
+[0.5.0]: https://github.com/nyactl/tix-for-jira/releases/tag/v0.5.0
 [0.4.1]: https://github.com/nyactl/tix-for-jira/releases/tag/v0.4.1
 [0.4.0]: https://github.com/nyactl/tix-for-jira/releases/tag/v0.4.0
 [0.3.0]: https://github.com/nyactl/tix-for-jira/releases/tag/v0.3.0
