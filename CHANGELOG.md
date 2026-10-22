@@ -15,6 +15,10 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 - `tix mcp` no longer exits when Jira rejects the token, the token is missing or Jira is out of reach. It starts anyway, and every tool call returns the reason and the fix, such as `tix auth login`, so MCP clients show it instead of "Connection closed". After a new login, the next call connects without restarting the client.
 
+### Fixed
+
+- `tix auth login` on macOS no longer fails with "An invalid attempt to change the owner of an item. (-25244)" when the old token was saved by another build of tix, such as a Homebrew and a local build. The old token is removed with Apple's `security` tool and the new one belongs to the running build.
+
 ## [0.4.1] - 2026-10-16
 
 ### Changed
