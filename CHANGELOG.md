@@ -6,6 +6,7 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ### Added
 
+- `tix move KEY PARENT` turns a ticket into a subtask of another ticket in the same project, or moves a subtask to another parent; `tix move KEY --type Story` turns a subtask back into a standard ticket. Without a parent you choose one of your other standard tickets in the project. MCP tool `move_issue`. The approval shows the new type and parent and whether the status stays; if the new type's workflow lacks the status, Jira sets its default status. A ticket with subtasks of its own is refused, as Jira cannot nest them.
 - `tix link`, `tix log` and `tix weblink` let you choose the ticket when you leave out its key, as other commands already do: `tix log 30m`, `tix weblink URL`. `tix link` without arguments also lets you choose the relation and then the other ticket.
 
 ## [0.5.0] - 2026-10-22

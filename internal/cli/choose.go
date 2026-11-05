@@ -107,6 +107,22 @@ func (a *App) otherTicket(ctx context.Context, svc *core.Service, key, title str
 	if len(others) == 0 {
 		return "", errors.New("you have no other open tickets; give the other ticket key")
 	}
+	return a.chooseOther(others, title)
+}
+
+// moveParent lets the user choose the ticket key is to become a subtask of.
+func (a *App) moveParent(ctx context.Context, svc *core.Service, key string) (string, error) {
+	others, err := svc.MoveParents(ctx, key)
+	if err != nil {
+		return "", err
+	}
+	if len(others) == 0 {
+		return "", fmt.Errorf("you have no other open standard tickets in the project of %s; give the parent's key", strings.ToUpper(key))
+	}
+	return a.chooseOther(others, "Put "+strings.ToUpper(key)+" under")
+}
+
+func (a *App) chooseOther(others []core.IssueSummary, title string) (string, error) {
 	lines := make([]string, len(others))
 	for k, is := range others {
 		lines[k] = ticketLine(is)

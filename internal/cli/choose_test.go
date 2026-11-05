@@ -4,7 +4,9 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/nyactl/tix-for-jira/internal/jira"
 	"github.com/nyactl/tix-for-jira/internal/jiratest"
 )
 
@@ -269,5 +271,55 @@ func TestChooseTicketFirst(t *testing.T) {
 	e.tty.noTTY = true
 	if _, _, err := e.run(t, "link", "PROJ-1", "blocks"); err == nil || !strings.Contains(err.Error(), "give the other ticket key") {
 		t.Errorf("no terminal: %v", err)
+	}
+}
+
+func init() { jira.BulkPollInterval = time.Millisecond }
+
+func TestMove(t *testing.T) {
+	e := newEnv(t).loggedIn(t)
+	e.fake.AddIssue(jiratest.Issue{Key: "PROJ-3", Summary: "Story", Assignee: "acc-me"})
+	e.fake.AddIssue(jiratest.Issue{Key: "PROJ-5", Summary: "My epic", Assignee: "acc-me", Type: "Epic"})
+	e.fake.AddIssue(jiratest.Issue{Key: "PROJ-6", Summary: "My subtask", Assignee: "acc-me", Type: "Subtask", Parent: "PROJ-3"})
+	e.fake.AddIssue(jiratest.Issue{Key: "OTHER-1", Summary: "Elsewhere", Assignee: "acc-me"})
+
+	// Choose the ticket, then the one to put it under: only your standard
+	// tickets in the same project are offered.
+	e.tty.picks = []pickChoice{{"PROJ-1", ""}, {"PROJ-3", ""}}
+	e.tty.answers = []string{"y"}
+	if _, _, err := e.run(t, "move"); err != nil {
+		t.Fatal(err)
+	}
+	if i := e.fake.Issues["PROJ-1"]; i.Type != "Subtask" || i.Parent != "PROJ-3" {
+		t.Fatalf("PROJ-1 is a %s under %q", i.Type, i.Parent)
+	}
+	// picked holds the second picker.
+	if offered := strings.Join(e.tty.picked, "\n"); offered != "PROJ-3     [To Do] Story" {
+		t.Errorf("offered %q", offered)
+	}
+	if q := e.tty.asked[len(e.tty.asked)-1]; !strings.Contains(q, "- Type: Task -> Subtask") || !strings.Contains(q, "PROJ-3 (Story)") {
+		t.Errorf("asked %q", q)
+	}
+
+	// --type without a parent turns the subtask back, without a picker.
+	e.tty.picks = nil
+	e.tty.answers = []string{"y"}
+	if _, _, err := e.run(t, "move", "PROJ-1", "--type", "Task"); err != nil {
+		t.Fatal(err)
+	}
+	if i := e.fake.Issues["PROJ-1"]; i.Type != "Task" || i.Parent != "" {
+		t.Fatalf("PROJ-1 is a %s under %q", i.Type, i.Parent)
+	}
+
+	// Declining changes nothing.
+	e.tty.answers = []string{"n"}
+	_, _, _ = e.run(t, "move", "PROJ-1", "PROJ-3")
+	if i := e.fake.Issues["PROJ-1"]; i.Type != "Task" {
+		t.Errorf("declined move changed PROJ-1 to %s", i.Type)
+	}
+
+	e.tty.noTTY = true
+	if _, _, err := e.run(t, "move", "PROJ-1"); err == nil || !strings.Contains(err.Error(), "give the other ticket key") {
+		t.Errorf("without a parent or terminal: %v", err)
 	}
 }

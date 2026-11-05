@@ -189,6 +189,12 @@ type attachInput struct {
 	Path string `json:"path" jsonschema:"Absolute path of a local file the user named; hidden files and folders are refused"`
 }
 
+type moveInput struct {
+	Key    string `json:"key" jsonschema:"Ticket key, e.g. PROJ-123"`
+	Parent string `json:"parent,omitempty" jsonschema:"Key of the standard ticket to put it under as a subtask; leave out to make a subtask a standard ticket"`
+	Type   string `json:"type,omitempty" jsonschema:"Target issue type, e.g. Story; needed without parent, optional with parent (the subtask type)"`
+}
+
 type sprintMoveInput struct {
 	Key    string `json:"key" jsonschema:"Ticket key, e.g. PROJ-123"`
 	Sprint string `json:"sprint" jsonschema:"Sprint ID or name (see list_sprints), or backlog"`
@@ -530,6 +536,11 @@ func (s *server) registerWrites(srv *mcp.Server) {
 		func(ctx context.Context, req *mcp.CallToolRequest, in sprintMoveInput) (*mcp.CallToolResult, any, error) {
 			p, err := s.svc.PlanMoveSprint(ctx, in.Key, in.Sprint)
 			return s.approveThenApply(ctx, req, "move_to_sprint", in, p, err)
+		})
+	add(s, srv, "move_issue", "Turn a ticket into a subtask of another ticket in the same project, move a subtask to another parent, or turn a subtask into a standard ticket (give type, leave out parent). The user approves it first.", writeAnnotations(core.Destructive),
+		func(ctx context.Context, req *mcp.CallToolRequest, in moveInput) (*mcp.CallToolResult, any, error) {
+			p, err := s.svc.PlanMove(ctx, in.Key, in.Parent, in.Type)
+			return s.approveThenApply(ctx, req, "move_issue", in, p, err)
 		})
 }
 

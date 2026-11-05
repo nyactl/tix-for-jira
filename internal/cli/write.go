@@ -239,6 +239,44 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 	}
 	parent.Flags().Bool("remove", false, "take the ticket out of its epic or parent")
 	parent.Flags().String("project", "", "offer only epics of this project")
+	move := &cobra.Command{
+		Use:   "move [key] [parent]",
+		Short: "Turn a ticket into a subtask of another ticket, or a subtask back into a standard ticket",
+		Long: "Make one of your tickets a subtask of another of your tickets in the same project, or move a subtask to\n" +
+			"another parent. With --type and no parent, a subtask becomes a standard ticket of that type. Without a key\n" +
+			"you choose the ticket, and without a parent (and --type) the ticket to put it under. A ticket with subtasks\n" +
+			"of its own cannot become a subtask. If its status is not part of the new type's workflow, Jira sets the\n" +
+			"default status.",
+		Example: `  tix move PROJ-12 PROJ-7
+  tix move PROJ-12
+  tix move PROJ-12 --type Story`,
+		Args:              cobra.MaximumNArgs(2),
+		ValidArgsFunction: a.completeTickets,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			typ, _ := cmd.Flags().GetString("type")
+			svc, _, err := a.service(cmd)
+			if err != nil {
+				return err
+			}
+			key, err := a.ticket(cmd.Context(), svc, args, 0)
+			if err != nil {
+				return err
+			}
+			parent := ""
+			switch {
+			case len(args) > 1:
+				parent = args[1]
+			case typ == "":
+				if parent, err = a.moveParent(cmd.Context(), svc, key); err != nil {
+					return err
+				}
+			}
+			p, err := svc.PlanMove(cmd.Context(), key, parent, typ)
+			return a.apply(cmd, svc, p, err)
+		},
+	}
+	move.Flags().String("type", "", "issue type to become: a standard type without a parent, or the subtask type")
+
 	create.Flags().StringArray("set", nil, `other field "Name=value" (repeatable)`)
 	_ = create.MarkFlagRequired("summary")
 
@@ -433,7 +471,7 @@ func (a *App) addWriteCommands(root *cobra.Command) {
 	for _, c := range []*cobra.Command{logWork, link, weblink, attach} {
 		c.ValidArgsFunction = a.completeTickets
 	}
-	root.AddCommand(comment, update, transition, create, parent, logWork, link, unlink, weblink, take, attach,
+	root.AddCommand(comment, update, transition, create, parent, move, logWork, link, unlink, weblink, take, attach,
 		watchCmd("watch", "Watch a ticket to get its notifications", true),
 		watchCmd("unwatch", "Stop watching a ticket", false))
 }

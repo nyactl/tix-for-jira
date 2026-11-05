@@ -99,7 +99,12 @@ type Fake struct {
 	// crafted query could, to test that callers re-check every result.
 	UnscopedSearch bool
 	Requests       []string // "METHOD path" of every request
-	nextID         int
+	// MoveFailure makes bulk move tasks report this error for every issue.
+	MoveFailure string
+	// QueueErrors makes that many checks of a move task fail with HTTP 500.
+	QueueErrors int
+	moveTasks   map[string]int // task ID -> remaining RUNNING polls
+	nextID      int
 }
 
 var statuses = map[string]struct{ id, cat string }{
@@ -354,6 +359,12 @@ func (f *Fake) serve(w http.ResponseWriter, r *http.Request) {
 		f.createLink(w, body)
 	case reLink.MatchString(p) && r.Method == http.MethodDelete:
 		f.deleteLink(w, reLink.FindStringSubmatch(p)[1])
+	case p == "/rest/api/3/project/PROJ/statuses":
+		f.projectStatuses(w)
+	case p == "/rest/api/3/bulk/issues/move" && r.Method == http.MethodPost:
+		f.bulkMove(w, body)
+	case strings.HasPrefix(p, "/rest/api/3/bulk/queue/"):
+		f.bulkQueue(w, strings.TrimPrefix(p, "/rest/api/3/bulk/queue/"))
 	case p == "/rest/api/3/project/search":
 		writeJSON(w, 200, map[string]any{"values": []any{map[string]string{"id": "1", "key": "PROJ", "name": "Project"}}, "total": 1, "isLast": true})
 	case p == "/rest/api/3/issue" && r.Method == http.MethodPost:
@@ -913,4 +924,118 @@ func requiredScope(r *http.Request) string {
 		return "write:jira-work"
 	}
 	return "read:jira-work"
+}
+
+// subtaskStatuses is the workflow of subtask types: it lacks "In Progress",
+// so moves into a subtask type can test Jira's status mapping.
+var subtaskStatuses = []string{"To Do", "Done"}
+
+func (f *Fake) projectStatuses(w http.ResponseWriter) {
+	var out []any
+	for _, t := range issueTypes {
+		names := []string{"To Do", "In Progress", "Done"}
+		if t.subtask {
+			names = subtaskStatuses
+		}
+		var sts []any
+		for _, n := range names {
+			sts = append(sts, map[string]string{"id": statuses[n].id, "name": n})
+		}
+		out = append(out, map[string]any{"id": t.id, "name": t.name, "subtask": t.subtask, "statuses": sts})
+	}
+	writeJSON(w, 200, out)
+}
+
+// bulkMove models Jira's bulk move for one target: "PROJ,typeID[,parent]".
+func (f *Fake) bulkMove(w http.ResponseWriter, body map[string]any) {
+	if notify, _ := body["sendBulkNotification"].(bool); !notify {
+		errJSON(w, 403, "You do not have the necessary permissions to disable bulk mail notifications for this operation.")
+		return
+	}
+	mapping, _ := body["targetToSourcesMapping"].(map[string]any)
+	if len(mapping) != 1 {
+		errJSON(w, 400, "expected one target")
+		return
+	}
+	for target, v := range mapping {
+		parts := strings.Split(target, ",")
+		if len(parts) < 2 || parts[0] != "PROJ" {
+			errJSON(w, 400, "invalid target "+target)
+			return
+		}
+		var typ *struct {
+			id, name string
+			subtask  bool
+			level    int
+		}
+		for k := range issueTypes {
+			if issueTypes[k].id == parts[1] {
+				typ = &issueTypes[k]
+			}
+		}
+		if typ == nil {
+			errJSON(w, 400, "unknown issue type "+parts[1])
+			return
+		}
+		parent := ""
+		if len(parts) > 2 {
+			parent = parts[2]
+			pi := f.Issues[parent]
+			if pi == nil {
+				errJSON(w, 400, "parent not found")
+				return
+			}
+			if lvl, _ := typeJSON(pi.Type)["hierarchyLevel"].(int); lvl <= typ.level {
+				errJSON(w, 400, "Target parent provided should be on a higher level than the target issue type.")
+				return
+			}
+		} else if typ.subtask {
+			errJSON(w, 400, "a subtask needs a target parent")
+			return
+		}
+		src, _ := v.(map[string]any)
+		keys, _ := src["issueIdsOrKeys"].([]any)
+		f.nextID++
+		id := strconv.Itoa(f.nextID)
+		if f.moveTasks == nil {
+			f.moveTasks = map[string]int{}
+		}
+		f.moveTasks[id] = 1
+		if f.MoveFailure == "" {
+			for _, k := range keys {
+				i := f.Issues[fmt.Sprint(k)]
+				if i == nil {
+					continue
+				}
+				i.Type, i.Parent = typ.name, parent
+				if typ.subtask && !slices.Contains(subtaskStatuses, i.Status) {
+					i.Status = "To Do"
+				}
+			}
+		}
+		writeJSON(w, 201, map[string]string{"taskId": id})
+	}
+}
+
+func (f *Fake) bulkQueue(w http.ResponseWriter, id string) {
+	if f.QueueErrors > 0 {
+		f.QueueErrors--
+		errJSON(w, 500, "internal error")
+		return
+	}
+	left, ok := f.moveTasks[id]
+	if !ok {
+		errJSON(w, 404, "A task could not be found for the given task id: "+id+".")
+		return
+	}
+	if left > 0 {
+		f.moveTasks[id] = left - 1
+		writeJSON(w, 200, map[string]any{"taskId": id, "status": "RUNNING"})
+		return
+	}
+	failed := map[string]any{}
+	if f.MoveFailure != "" {
+		failed["10001"] = []string{f.MoveFailure}
+	}
+	writeJSON(w, 200, map[string]any{"taskId": id, "status": "COMPLETE", "failedAccessibleIssues": failed, "invalidOrInaccessibleIssueCount": 0})
 }

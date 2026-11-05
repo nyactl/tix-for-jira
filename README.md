@@ -100,6 +100,7 @@ tix create --project PROJ --type Task --summary "Follow-up" --description -   # 
 tix link PROJ-123 "is blocked by" PROJ-124
 tix unlink PROJ-123 PROJ-124       # without PROJ-124, choose one of its links
 tix parent PROJ-123 PROJ-7         # put it under an epic, also someone else's; --remove takes it out
+tix move PROJ-123 PROJ-120         # make it a subtask of PROJ-120; --type Story turns a subtask back
 tix epics                          # the open epics your tickets belong to
 tix take PROJ-130                  # assign an unassigned ticket to yourself
 tix watch PROJ-123                 # and tix unwatch PROJ-123
@@ -109,7 +110,7 @@ tix attach PROJ-123 ./screenshot.png   # upload a file (up to 50 MiB)
 tix sprint move PROJ-123 "Sprint 12"   # or: tix sprint move PROJ-123 backlog
 ```
 
-**Choosing instead of typing:** leave out the ticket key, as in `tix show`, `tix comment --body "…"` or `tix transition`, and a picker lists your open tickets: type part of the key or summary, move with the arrow keys, press Enter. `tix transition` without a status lets you choose one of the ticket's status changes the same way, and `tix parent` without an epic one of the open epics your tickets already belong to (other epics by key). `tix link` without arguments asks for the ticket, the relation and the other ticket; `tix log 30m` and `tix weblink URL` ask only for the ticket.
+**Choosing instead of typing:** leave out the ticket key, as in `tix show`, `tix comment --body "…"` or `tix transition`, and a picker lists your open tickets: type part of the key or summary, move with the arrow keys, press Enter. `tix transition` without a status lets you choose one of the ticket's status changes the same way, and `tix parent` without an epic one of the open epics your tickets already belong to (other epics by key). `tix move` without a parent offers your other standard tickets in the same project. `tix link` without arguments asks for the ticket, the relation and the other ticket; `tix log 30m` and `tix weblink URL` ask only for the ticket.
 
 ![tix transition without arguments: choose the ticket, then the status, by typing part of them](docs/pick.gif)
 
@@ -144,7 +145,7 @@ No credentials go into the client configuration; tix-for-jira reads them from it
 
 | Read tools | Write tools (with `--allow-writes`) |
 |---|---|
-| `whoami`, `my_issues`, `search_issues`, `list_saved_searches`, `get_issue`, `list_comments`, `get_history`, `get_status_times`, `list_worklogs`, `list_transitions`, `list_editable_fields`, `get_attachment`, `list_link_types`, `list_projects`, `list_issue_types`, `list_boards`, `list_sprints`, `get_active_sprint`, `get_backlog` | `add_comment`, `update_fields`, `transition_issue`, `create_issue`, `log_work`, `link_issues`, `unlink_issues`, `assign_to_me`, `attach_file`, `add_web_link`, `remove_web_link`, `watch_issue`, `unwatch_issue`, `move_to_sprint` |
+| `whoami`, `my_issues`, `search_issues`, `list_saved_searches`, `get_issue`, `list_comments`, `get_history`, `get_status_times`, `list_worklogs`, `list_transitions`, `list_editable_fields`, `get_attachment`, `list_link_types`, `list_projects`, `list_issue_types`, `list_boards`, `list_sprints`, `get_active_sprint`, `get_backlog` | `add_comment`, `update_fields`, `transition_issue`, `create_issue`, `log_work`, `link_issues`, `unlink_issues`, `assign_to_me`, `attach_file`, `add_web_link`, `remove_web_link`, `watch_issue`, `unwatch_issue`, `move_issue`, `move_to_sprint` |
 
 Prompts, offered by MCP clients as ready-made requests: `morning-overview` (what changed on my tickets since yesterday), `ticket-summary` (goal, state, open questions and next steps of one ticket) and `sprint-status` (my part of the active sprint). They only use the read tools above.
 

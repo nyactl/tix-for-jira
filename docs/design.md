@@ -35,7 +35,7 @@ The mode is set in the config file and can only be changed from an interactive t
 
 - *Tickets:* a ticket is in scope when its assignee is the authenticated user. Searches are rewritten to `assignee = currentUser() AND (<your JQL>) ORDER BY …` and every result is checked again, so malformed JQL cannot widen the scope. Fetching a key that is out of scope returns the same "not found" as a missing ticket.
 - *Related tickets:* parents, subtasks and linked tickets that are not in scope show only key, issue type and status.
-- *Epics:* a ticket of someone else whose type is above standard tickets (an epic, hierarchy level 1 or more) may become the parent of one of your tickets, given by its key. tix then reads only its key, issue type and status, as for any parent; a key that is not such an epic gets the usual "not found". Lists of epics (`tix epics`, completion, the picker) come only from the parents of your own tickets, so they reveal nothing your tickets do not already show; there is no project-wide epic search and no MCP tool for one. The interactive picker alone also shows those epics' summaries, with known names replaced: it draws on the terminal device, which commands started by an assistant cannot open. Descriptions, comments, people and other children of such epics are never read. Subtasks still need a parent in scope.
+- *Epics:* a ticket of someone else whose type is above standard tickets (an epic, hierarchy level 1 or more) may become the parent of one of your tickets, given by its key. tix then reads only its key, issue type and status, as for any parent; a key that is not such an epic gets the usual "not found". Lists of epics (`tix epics`, completion, the picker) come only from the parents of your own tickets, so they reveal nothing your tickets do not already show; there is no project-wide epic search and no MCP tool for one. The interactive picker alone also shows those epics' summaries, with known names replaced: it draws on the terminal device, which commands started by an assistant cannot open. Descriptions, comments, people and other children of such epics are never read. Subtasks still need a parent in scope. Changing a ticket between standard and subtask types (`tix move`) uses Jira's bulk move, as the edit endpoint cannot do it; it runs as a task that tix waits for, and it keeps to one project.
 - *People:* everyone other than you becomes "Person A", "Person B", … in order of first appearance. You are "Me". Labels are stable for the lifetime of the process. This applies to authors, assignees, reporters, mentions, change-history values for person fields, worklog and attachment authors, and person-type custom fields.
 - *Free text:* the full display names and emails of people seen in structured data are replaced in descriptions and comments too. Names typed in free text that never appear in structured data cannot be detected; this is best-effort.
 - *Attachments* are downloaded only for in-scope tickets. Their contents are not redacted.
@@ -51,7 +51,7 @@ Every write is built as a **plan** first: a human-readable description of exactl
 | Write | Kind |
 |---|---|
 | add comment, create issue, log work, link issues | additive |
-| update fields, transition, remove a link or web link | destructive |
+| update fields, transition, move to a sprint or under another parent, remove a link or web link | destructive |
 
 All writes need approval because even additive writes publish text under your name, which a prompt-injected assistant could misuse to leak data.
 

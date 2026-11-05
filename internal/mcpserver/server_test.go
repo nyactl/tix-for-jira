@@ -107,7 +107,7 @@ func toolMap(t *testing.T, h *harness) map[string]*mcp.Tool {
 	return m
 }
 
-var writeTools = []string{"add_comment", "add_web_link", "assign_to_me", "attach_file", "create_issue", "link_issues", "log_work", "move_to_sprint", "remove_web_link", "transition_issue", "unlink_issues", "unwatch_issue", "update_fields", "watch_issue"}
+var writeTools = []string{"add_comment", "add_web_link", "assign_to_me", "attach_file", "create_issue", "link_issues", "log_work", "move_issue", "move_to_sprint", "remove_web_link", "transition_issue", "unlink_issues", "unwatch_issue", "update_fields", "watch_issue"}
 
 func TestReadOnlyByDefault(t *testing.T) {
 	t.Parallel()
@@ -138,7 +138,7 @@ func TestWriteToolAnnotations(t *testing.T) {
 			t.Errorf("%s missing", name)
 			continue
 		}
-		wantDestructive := name == "update_fields" || name == "transition_issue" || name == "assign_to_me" || name == "unwatch_issue" || name == "move_to_sprint" || name == "unlink_issues" || name == "remove_web_link"
+		wantDestructive := name == "update_fields" || name == "transition_issue" || name == "assign_to_me" || name == "unwatch_issue" || name == "move_to_sprint" || name == "move_issue" || name == "unlink_issues" || name == "remove_web_link"
 		a := tool.Annotations
 		if a == nil || a.ReadOnlyHint || a.DestructiveHint == nil || *a.DestructiveHint != wantDestructive {
 			t.Errorf("%s annotations = %+v", name, a)

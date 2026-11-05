@@ -494,3 +494,125 @@ func (c *Client) DeleteRemoteLink(ctx context.Context, key string, id int) error
 	}
 	return c.do(ctx, http.MethodDelete, p, nil, nil, nil)
 }
+
+// ProjectStatuses returns, per issue type of a project, the names of the
+// statuses its workflow knows, keyed by issue type ID.
+func (c *Client) ProjectStatuses(ctx context.Context, projectKey string) (map[string][]string, error) {
+	pk, err := NormalizeProjectKey(projectKey)
+	if err != nil {
+		return nil, err
+	}
+	var types []struct {
+		ID       string   `json:"id"`
+		Statuses []Status `json:"statuses"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/rest/api/3/project/"+pk+"/statuses", nil, nil, &types); err != nil {
+		return nil, err
+	}
+	out := make(map[string][]string, len(types))
+	for _, t := range types {
+		for _, s := range t.Statuses {
+			out[t.ID] = append(out[t.ID], s.Name)
+		}
+	}
+	return out, nil
+}
+
+// BulkPollInterval is how often MoveIssue checks on Jira's move task.
+var BulkPollInterval = time.Second
+
+// MoveIssue changes an issue's type within its project and, for a subtask
+// type, its parent (empty for a standard type). Jira's edit endpoint cannot
+// convert between standard and subtask types, so this uses the bulk move
+// operation, which runs as a task; MoveIssue waits until it has finished.
+// Jira maps a status the target workflow lacks to its default status.
+func (c *Client) MoveIssue(ctx context.Context, projectKey, key, issueTypeID, parentKey string) error {
+	pk, err := NormalizeProjectKey(projectKey)
+	if err != nil {
+		return err
+	}
+	k, err := NormalizeKey(key)
+	if err != nil {
+		return err
+	}
+	if err := checkID(issueTypeID); err != nil {
+		return err
+	}
+	target := pk + "," + issueTypeID
+	if parentKey != "" {
+		p, err := NormalizeKey(parentKey)
+		if err != nil {
+			return err
+		}
+		target += "," + p
+	}
+	// Turning bulk notifications off needs admin rights.
+	body := map[string]any{
+		"sendBulkNotification": true,
+		"targetToSourcesMapping": map[string]any{target: map[string]any{
+			"inferClassificationDefaults": true,
+			"inferFieldDefaults":          true,
+			"inferStatusDefaults":         true,
+			"inferSubtaskTypeDefault":     true,
+			"issueIdsOrKeys":              []string{k},
+		}},
+	}
+	var started struct {
+		TaskID string `json:"taskId"`
+	}
+	if err := c.do(ctx, http.MethodPost, "/rest/api/3/bulk/issues/move", nil, body, &started); err != nil {
+		return err
+	}
+	if err := checkID(started.TaskID); err != nil {
+		return fmt.Errorf("unexpected move task: %w", err)
+	}
+	wait := func() error {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("the move of %s may still finish in Jira (task %s); look at %s there: %w", k, started.TaskID, k, ctx.Err())
+		case <-time.After(BulkPollInterval):
+			return nil
+		}
+	}
+	// The move is under way, so one failed check must not end the wait;
+	// only several do.
+	failedChecks := 0
+	for {
+		var task struct {
+			Status                          string              `json:"status"`
+			Failed                          map[string][]string `json:"failedAccessibleIssues"`
+			InvalidOrInaccessibleIssueCount int                 `json:"invalidOrInaccessibleIssueCount"`
+		}
+		if err := c.do(ctx, http.MethodGet, "/rest/api/3/bulk/queue/"+started.TaskID, nil, nil, &task); err != nil {
+			if failedChecks++; failedChecks >= 3 || ctx.Err() != nil {
+				return fmt.Errorf("could not check the move of %s, which may still finish in Jira (task %s); look at %s there: %w", k, started.TaskID, k, err)
+			}
+			if err := wait(); err != nil {
+				return err
+			}
+			continue
+		}
+		switch task.Status {
+		case "ENQUEUED", "RUNNING", "CANCEL_REQUESTED":
+			if err := wait(); err != nil {
+				return err
+			}
+			continue
+		case "COMPLETE":
+			var msgs []string
+			for _, m := range task.Failed {
+				msgs = append(msgs, m...)
+			}
+			if len(msgs) > 0 {
+				slices.Sort(msgs)
+				return fmt.Errorf("jira did not move %s: %s", k, strings.Join(msgs, "; "))
+			}
+			if task.InvalidOrInaccessibleIssueCount > 0 {
+				return fmt.Errorf("jira did not move %s: not found or not accessible", k)
+			}
+			return nil
+		default:
+			return fmt.Errorf("jira did not move %s: move task ended with status %s", k, task.Status)
+		}
+	}
+}
