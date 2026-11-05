@@ -4,6 +4,8 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ## Unreleased
 
+## [0.6.0] - 2026-11-05
+
 ### Added
 
 - `tix move KEY PARENT` turns a ticket into a subtask of another ticket in the same project, or moves a subtask to another parent; `tix move KEY --type Story` turns a subtask back into a standard ticket. Without a parent you choose one of your other standard tickets in the project. MCP tool `move_issue`. The approval shows the new type and parent and whether the status stays; if the new type's workflow lacks the status, Jira sets its default status. A ticket with subtasks of its own is refused, as Jira cannot nest them.
@@ -103,6 +105,7 @@ First release, tested against Jira Cloud with a non-admin account.
 - Markdown <-> Atlassian Document Format conversion with `@[label]` mentions.
 - Profiles (`--profile`, `TIX_JIRA_PROFILE`) to switch between sites; development builds require an explicit profile.
 
+[0.6.0]: https://github.com/nyactl/tix-for-jira/releases/tag/v0.6.0
 [0.5.0]: https://github.com/nyactl/tix-for-jira/releases/tag/v0.5.0
 [0.4.1]: https://github.com/nyactl/tix-for-jira/releases/tag/v0.4.1
 [0.4.0]: https://github.com/nyactl/tix-for-jira/releases/tag/v0.4.0
