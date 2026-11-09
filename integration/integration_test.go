@@ -147,8 +147,8 @@ func (s *site) create(t *testing.T, summary, description string) string {
 	return key
 }
 
-// upload adds an attachment through the REST API; tix-for-jira itself cannot
-// upload, so this is test-only.
+// upload adds an attachment through the REST API directly, so the download
+// checks do not depend on tix attach.
 func (s *site) upload(t *testing.T, key, name string, data []byte) {
 	t.Helper()
 	if _, err := newClient(s.cfg, s.token).AddAttachment(context.Background(), key, name, data); err != nil {
