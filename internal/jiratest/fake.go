@@ -41,6 +41,7 @@ type Comment struct {
 type Change struct {
 	Author, Created                        string
 	Field, FieldType, From, FromS, To, ToS string
+	FieldID                                string
 }
 
 type Worklog struct {
@@ -103,6 +104,8 @@ type Fake struct {
 	MoveFailure string
 	// QueueErrors makes that many checks of a move task fail with HTTP 500.
 	QueueErrors int
+	// FieldsError makes loading field definitions fail with HTTP 500.
+	FieldsError bool
 	moveTasks   map[string]int // task ID -> remaining RUNNING polls
 	nextID      int
 }
@@ -337,6 +340,8 @@ func (f *Fake) serve(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, f.userJSON(me.AccountID))
 	case p == "/rest/api/3/search/jql":
 		f.search(w, r, me)
+	case p == "/rest/api/3/field" && f.FieldsError:
+		writeJSON(w, 500, map[string]any{"errorMessages": []string{"field definitions unavailable"}})
 	case p == "/rest/api/3/field":
 		f.fieldList(w)
 	case p == "/rest/api/3/jql/autocompletedata/suggestions":
@@ -625,7 +630,7 @@ func (f *Fake) issueRoute(w http.ResponseWriter, r *http.Request, i *Issue, sub 
 		var vs []any
 		for n, c := range i.Changes {
 			vs = append(vs, map[string]any{"id": strconv.Itoa(n + 1), "author": f.userJSON(c.Author), "created": c.Created, "items": []any{map[string]any{
-				"field": c.Field, "fieldtype": c.FieldType, "from": c.From, "fromString": c.FromS, "to": c.To, "toString": c.ToS}}})
+				"field": c.Field, "fieldId": c.FieldID, "fieldtype": c.FieldType, "from": c.From, "fromString": c.FromS, "to": c.To, "toString": c.ToS}}})
 		}
 		writeJSON(w, 200, paged(r, "values", vs))
 	case "/worklog GET":

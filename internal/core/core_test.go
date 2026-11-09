@@ -453,6 +453,32 @@ func TestPlanWorklog(t *testing.T) {
 	}
 }
 
+func TestHistoryFailsClosedWithoutFieldDefinitions(t *testing.T) {
+	t.Parallel()
+	f := fixture(t)
+	f.AddUser(jiratest.User{AccountID: "acc-carol", DisplayName: "Carol Diaz", Email: "carol@example.com"})
+	f.AddIssue(jiratest.Issue{Key: "PROJ-7", Summary: "Plain", Assignee: "acc-me", Reporter: "acc-me",
+		Changes: []jiratest.Change{{Author: "acc-me", Created: "2026-10-02T09:00:00.000+0000", Field: "Reviewer", FieldID: "customfield_10060",
+			FieldType: "custom", To: "acc-carol", ToS: "Carol Diaz"}}})
+	ctx := context.Background()
+
+	s := service(t, f, config.PrivacyOwn)
+	hist, err := s.History(ctx, "PROJ-7", "", 10)
+	if err != nil || hist[0].Changes[0].To != "Person A" {
+		t.Fatalf("with definitions: %+v, %v", hist, err)
+	}
+
+	f.FieldsError = true
+	hist, err = service(t, f, config.PrivacyOwn).History(ctx, "PROJ-7", "", 10)
+	if err == nil || !strings.Contains(err.Error(), "field definitions") {
+		t.Errorf("own mode without definitions: %+v, %v", hist, err)
+	}
+	hist, err = service(t, f, config.PrivacyOff).History(ctx, "PROJ-7", "", 10)
+	if err != nil || hist[0].Changes[0].To != "Carol Diaz" {
+		t.Errorf("off mode without definitions: %+v, %v", hist, err)
+	}
+}
+
 func TestParseDuration(t *testing.T) {
 	t.Parallel()
 	ok := map[string]int{"1h 30m": 5400, "1h30m": 5400, "90m": 5400, "1.5h": 5400, "2h": 7200, "1m": 60, " 45m ": 2700}

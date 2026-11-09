@@ -385,7 +385,12 @@ func (s *Service) History(ctx context.Context, key, since string, max int) ([]Ch
 	if err != nil {
 		return nil, err
 	}
-	defs, _ := s.fieldDefs(ctx)
+	// Without definitions, custom user fields would pass as plain text with
+	// only the names seen so far replaced.
+	defs, err := s.fieldDefs(ctx)
+	if err != nil && s.people.Mode() == people.Own {
+		return nil, err
+	}
 
 	var out []ChangeView
 	for _, e := range entries {
