@@ -453,6 +453,57 @@ func TestPlanWorklog(t *testing.T) {
 	}
 }
 
+func TestHistoryRedactsPeopleSeenLater(t *testing.T) {
+	t.Parallel()
+	f := fixture(t)
+	f.AddUser(jiratest.User{AccountID: "acc-carol", DisplayName: "Carol Diaz", Email: "carol@example.com"})
+	f.AddUser(jiratest.User{AccountID: "acc-dave", DisplayName: "Dave Kim", Email: "dave@example.com"})
+	f.AddIssue(jiratest.Issue{Key: "PROJ-7", Summary: "Plain", Assignee: "acc-me", Reporter: "acc-me",
+		Changes: []jiratest.Change{
+			{Author: "acc-me", Created: "2026-10-02T09:00:00.000+0000", Field: "summary", FieldType: "jira", FromS: "Plain", ToS: "Ask Carol Diaz and Dave Kim"},
+			{Author: "acc-carol", Created: "2026-10-03T09:00:00.000+0000", Field: "labels", FieldType: "jira", ToS: "auth"},
+			{Author: "acc-me", Created: "2026-10-04T09:00:00.000+0000", Field: "assignee", FieldType: "jira", From: "acc-dave", FromS: "Dave Kim", To: "acc-me", ToS: "Max Mustermann"},
+		}})
+	s := service(t, f, config.PrivacyOwn)
+	hist, err := s.History(context.Background(), "PROJ-7", "", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := json.Marshal(hist)
+	if strings.Contains(string(b), "Carol") || strings.Contains(string(b), "Dave") {
+		t.Errorf("history shows names of people seen later: %s", b)
+	}
+}
+
+func TestPlanWorklogWithoutStartDoesNotDependOnTheClock(t *testing.T) {
+	t.Parallel()
+	f := fixture(t)
+	s := service(t, f, config.PrivacyOwn)
+	ctx := context.Background()
+	clock := time.Date(2026, 10, 8, 11, 59, 50, 0, time.UTC)
+	s.now = func() time.Time { return clock }
+	first, err := s.PlanWorklog(ctx, "PROJ-1", "30m", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock = clock.Add(2 * time.Minute)
+	again, err := s.PlanWorklog(ctx, "PROJ-1", "30m", " ", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Description != again.Description || !strings.Contains(first.Description, "started now.") {
+		t.Errorf("descriptions differ or lack \"now\":\n%s\n%s", first.Description, again.Description)
+	}
+	clock = clock.Add(time.Minute)
+	if _, err := first.Apply(ctx); err != nil {
+		t.Fatal(err)
+	}
+	wls := f.Issues["PROJ-1"].Worklogs
+	if got := wls[len(wls)-1].Started; got != "2026-10-08T12:02:50.000+0000" {
+		t.Errorf("started = %s, want the time of apply", got)
+	}
+}
+
 func TestHistoryFailsClosedWithoutFieldDefinitions(t *testing.T) {
 	t.Parallel()
 	f := fixture(t)

@@ -87,6 +87,33 @@ func TestBoardsAndSprints(t *testing.T) {
 	}
 }
 
+func TestBoardListsRedactPeopleSeenLater(t *testing.T) {
+	t.Parallel()
+	f := agileFixture(t)
+	f.AddUser(jiratest.User{AccountID: "acc-carol", DisplayName: "Carol Diaz", Email: "carol@example.com"})
+	f.Issues["PROJ-5"].Summary = "Pair with Carol Diaz"
+	f.AddIssue(jiratest.Issue{Key: "PROJ-8", Summary: "Later item", Assignee: "acc-me", Reporter: "acc-carol"})
+	f.Issues["PROJ-1"].Summary = "Sync with Carol Diaz"
+	f.AddIssue(jiratest.Issue{Key: "PROJ-9", Summary: "Later sprint item", Assignee: "acc-me", Reporter: "acc-carol", Sprint: 11})
+	s := service(t, f, config.PrivacyOwn)
+	ctx := context.Background()
+	gs, err := s.ActiveSprints(ctx, "1", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bl, err := s.Backlog(ctx, "1", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(gs[0].Issues) != 2 || len(bl.Issues) != 2 {
+		t.Fatalf("sprint %+v, backlog %+v", gs[0].Issues, bl.Issues)
+	}
+	b, _ := json.Marshal([]any{gs, bl})
+	if strings.Contains(string(b), "Carol") {
+		t.Errorf("board lists show names of people seen later: %s", b)
+	}
+}
+
 func TestBoardIssuesAreRecheckedPerIssue(t *testing.T) {
 	t.Parallel()
 	f := agileFixture(t)
