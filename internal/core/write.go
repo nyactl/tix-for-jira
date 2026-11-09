@@ -225,6 +225,7 @@ func (s *Service) PlanTransition(ctx context.Context, key, target, comment strin
 		return nil, err
 	}
 	target = strings.TrimSpace(target)
+	comment = strings.TrimSpace(comment)
 	var byName, byStatus []jira.Transition
 	for _, t := range ts {
 		if strings.EqualFold(t.Name, target) {
@@ -503,6 +504,7 @@ func (s *Service) parseStart(started string) (time.Time, error) {
 
 // PlanWorklog prepares logging time on a ticket.
 func (s *Service) PlanWorklog(ctx context.Context, key, duration, started, comment string) (*Plan, error) {
+	comment = strings.TrimSpace(comment)
 	secs, err := ParseDuration(duration)
 	if err != nil {
 		return nil, err

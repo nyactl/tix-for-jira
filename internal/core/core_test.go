@@ -530,6 +530,43 @@ func TestHistoryFailsClosedWithoutFieldDefinitions(t *testing.T) {
 	}
 }
 
+func TestBlankOptionalCommentsAreDropped(t *testing.T) {
+	t.Parallel()
+	f := fixture(t)
+	s := service(t, f, config.PrivacyOwn)
+	ctx := context.Background()
+
+	p, err := s.PlanTransition(ctx, "PROJ-1", "in progress", " \t ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(p.Description, "With comment") {
+		t.Errorf("transition description = %s", p.Description)
+	}
+	before := len(f.Issues["PROJ-1"].Comments)
+	if _, err := p.Apply(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(f.Issues["PROJ-1"].Comments); got != before {
+		t.Errorf("transition posted %d comments, want %d", got-before, 0)
+	}
+
+	w, err := s.PlanWorklog(ctx, "PROJ-3", "30m", "09:00", "\n  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(w.Description, "With comment") {
+		t.Errorf("worklog description = %s", w.Description)
+	}
+	if _, err := w.Apply(ctx); err != nil {
+		t.Fatal(err)
+	}
+	// The fake records an absent comment as null.
+	if got := string(f.Issues["PROJ-3"].Worklogs[0].Comment); got != "null" {
+		t.Errorf("worklog comment = %s, want none", got)
+	}
+}
+
 func TestParseDuration(t *testing.T) {
 	t.Parallel()
 	ok := map[string]int{"1h 30m": 5400, "1h30m": 5400, "90m": 5400, "1.5h": 5400, "2h": 7200, "1m": 60, " 45m ": 2700}
