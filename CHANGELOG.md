@@ -4,6 +4,17 @@ All notable changes are documented here. The format follows [Keep a Changelog](h
 
 ## Unreleased
 
+## [0.6.1] - 2026-11-09
+
+### Fixed
+
+- A development build from a clean checkout of a release tag, such as `make dev` right after a release, counted as a release and could use the production profile without `--profile`. Builds from a checkout now show `+checkout` in their version and always need an explicit profile.
+- `log_work` over MCP without a start time no longer fails with "the approval does not match this change" when the approval comes in a later minute. The plan says "started now" and the time is taken when the work is logged.
+- A comment of only spaces on `tix transition`, `tix log`, `transition_issue` or `log_work` is dropped instead of posting an empty comment. Thanks to @bfs2021.
+- Change history and the sprint and backlog lists replace names in free text also when that person only appears in a later entry or ticket.
+- Change history fails in privacy mode `own` when Jira's field definitions cannot be loaded, instead of showing custom user fields unredacted.
+- README, design notes and the MCP server instructions describe uploads and the newer kinds of changes.
+
 ## [0.6.0] - 2026-11-05
 
 ### Added
@@ -105,6 +116,7 @@ First release, tested against Jira Cloud with a non-admin account.
 - Markdown <-> Atlassian Document Format conversion with `@[label]` mentions.
 - Profiles (`--profile`, `TIX_JIRA_PROFILE`) to switch between sites; development builds require an explicit profile.
 
+[0.6.1]: https://github.com/nyactl/tix-for-jira/releases/tag/v0.6.1
 [0.6.0]: https://github.com/nyactl/tix-for-jira/releases/tag/v0.6.0
 [0.5.0]: https://github.com/nyactl/tix-for-jira/releases/tag/v0.5.0
 [0.4.1]: https://github.com/nyactl/tix-for-jira/releases/tag/v0.4.1
