@@ -50,8 +50,8 @@ Every write is built as a **plan** first: a human-readable description of exactl
 
 | Write | Kind |
 |---|---|
-| add comment, create issue, log work, link issues | additive |
-| update fields, transition, move to a sprint or under another parent, remove a link or web link | destructive |
+| add comment, create issue, log work, link issues, attach a file, add a web link, watch | additive |
+| update fields, transition, assign to me, unwatch, move to a sprint, move under another parent or between standard and subtask type, remove a link or web link | destructive |
 
 All writes need approval because even additive writes publish text under your name, which a prompt-injected assistant could misuse to leak data.
 

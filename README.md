@@ -194,7 +194,7 @@ Names that someone typed into free text are replaced only if that person also ap
 - Jira Cloud only; macOS and Linux (no Windows).
 - On Linux, a Secret Service is required; headless servers without one cannot store the token.
 - People fields (assignee, reviewers) cannot be changed; tickets you create are assigned to you.
-- No deleting of tickets, comments or worklogs, and no uploads.
+- No deleting of tickets, comments, worklogs or attachments; uploads are limited to 50 MiB.
 - Durations are hours and minutes; days and weeks depend on site settings and are rejected.
 
 ## Development

@@ -67,7 +67,7 @@ func instructions(site string, mode config.PrivacyMode, writes bool) string {
 	}
 	b.WriteString("Mentions appear as @[label]. To mention someone in text you write, use the same @[label] form; only people shown before, in this or an earlier session, can be mentioned. Labels stay the same across sessions.\n\n")
 	if writes {
-		b.WriteString("Every change (comment, field update, transition, new ticket, work log, link, link removal) is shown to the user for approval before it happens. If the user declines, do not retry the same change unless asked.")
+		b.WriteString("Every change (comment, field update, transition, new ticket, work log, attachment, link, web link, watch, unwatch, assignment, sprint move, ticket move, link or web link removal) is shown to the user for approval before it happens. If the user declines, do not retry the same change unless asked.")
 	} else {
 		b.WriteString("This server is read-only; changes are not available.")
 	}
