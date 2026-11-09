@@ -522,7 +522,15 @@ func (s *Service) PlanWorklog(ctx context.Context, key, duration, started, comme
 	if err != nil {
 		return nil, err
 	}
-	desc := fmt.Sprintf("Log %s on %s, started %s.", formatSeconds(secs), s.people.Text(headline(issue)), start.Format("2006-01-02 15:04"))
+	// Without a start the plan says "now" and the time is taken on apply: the
+	// MCP approval is bound to the plan text, which is built again when the
+	// user answers, so it must not depend on the clock.
+	now := strings.TrimSpace(started) == ""
+	when := start.Format("2006-01-02 15:04")
+	if now {
+		when = "now"
+	}
+	desc := fmt.Sprintf("Log %s on %s, started %s.", formatSeconds(secs), s.people.Text(headline(issue)), when)
 	if comment != "" {
 		desc += "\n\nWith comment:\n\n" + indent(comment)
 	}
@@ -531,6 +539,9 @@ func (s *Service) PlanWorklog(ctx context.Context, key, duration, started, comme
 		Key:         issue.Key,
 		Description: desc,
 		apply: func(ctx context.Context) (string, error) {
+			if now {
+				start = s.now()
+			}
 			if _, err := s.jc.AddWorklog(ctx, issue.Key, secs, start, doc); err != nil {
 				return "", err
 			}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"testing"
 	"time"
@@ -389,6 +390,32 @@ func TestDevBuildNeedsExplicitProfile(t *testing.T) {
 		if !profile.IsRelease(v) {
 			t.Errorf("%s should count as a release", v)
 		}
+	}
+}
+
+func TestVersionFromBuildInfo(t *testing.T) {
+	vcs := []debug.BuildSetting{{Key: "vcs", Value: "git"}, {Key: "vcs.revision", Value: "06af396"}}
+	for _, c := range []struct {
+		name, linked, module string
+		settings             []debug.BuildSetting
+		want                 string
+		release              bool
+	}{
+		{"release archive", "v0.6.0", "v0.6.0", vcs, "v0.6.0", true},
+		{"module proxy install", "dev", "v0.6.0", nil, "v0.6.0", true},
+		{"clean checkout of a tag", "dev", "v0.6.0", vcs, "v0.6.0+checkout", false},
+		{"dirty checkout", "dev", "v0.6.0+dirty", vcs, "v0.6.0+dirty", false},
+		{"checkout after a tag", "dev", "v0.6.1-0.20261109120000-06af396abcde", vcs, "v0.6.1-0.20261109120000-06af396abcde+checkout", false},
+		{"no module version", "dev", "(devel)", vcs, "dev", false},
+	} {
+		info := &debug.BuildInfo{Main: debug.Module{Version: c.module}, Settings: c.settings}
+		got := versionFrom(c.linked, info)
+		if got != c.want || profile.IsRelease(got) != c.release {
+			t.Errorf("%s: version %q (release %v), want %q (release %v)", c.name, got, profile.IsRelease(got), c.want, c.release)
+		}
+	}
+	if got := versionFrom("dev", nil); got != "dev" {
+		t.Errorf("no build info: %q", got)
 	}
 }
 

@@ -475,6 +475,35 @@ func TestHistoryRedactsPeopleSeenLater(t *testing.T) {
 	}
 }
 
+func TestPlanWorklogWithoutStartDoesNotDependOnTheClock(t *testing.T) {
+	t.Parallel()
+	f := fixture(t)
+	s := service(t, f, config.PrivacyOwn)
+	ctx := context.Background()
+	clock := time.Date(2026, 10, 8, 11, 59, 50, 0, time.UTC)
+	s.now = func() time.Time { return clock }
+	first, err := s.PlanWorklog(ctx, "PROJ-1", "30m", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock = clock.Add(2 * time.Minute)
+	again, err := s.PlanWorklog(ctx, "PROJ-1", "30m", " ", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Description != again.Description || !strings.Contains(first.Description, "started now.") {
+		t.Errorf("descriptions differ or lack \"now\":\n%s\n%s", first.Description, again.Description)
+	}
+	clock = clock.Add(time.Minute)
+	if _, err := first.Apply(ctx); err != nil {
+		t.Fatal(err)
+	}
+	wls := f.Issues["PROJ-1"].Worklogs
+	if got := wls[len(wls)-1].Started; got != "2026-10-08T12:02:50.000+0000" {
+		t.Errorf("started = %s, want the time of apply", got)
+	}
+}
+
 func TestParseDuration(t *testing.T) {
 	t.Parallel()
 	ok := map[string]int{"1h 30m": 5400, "1h30m": 5400, "90m": 5400, "1.5h": 5400, "2h": 7200, "1m": 60, " 45m ": 2700}

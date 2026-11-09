@@ -60,13 +60,29 @@ func browse(ctx context.Context, url string) error {
 }
 
 func resolveVersion(v string) string {
+	info, _ := debug.ReadBuildInfo()
+	return versionFrom(v, info)
+}
+
+// versionFrom prefers the version set at link time. Otherwise it takes the
+// module version, which Go sets to the tag itself for a clean checkout of a
+// release tag; a VCS stamp marks such a build as a local checkout, so it gets
+// "+checkout" and stays a development build. Installs from the module proxy
+// carry no VCS stamp.
+func versionFrom(v string, info *debug.BuildInfo) string {
 	if v != "" && v != "dev" {
 		return v
 	}
-	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
-		return info.Main.Version
+	if info == nil || info.Main.Version == "" || info.Main.Version == "(devel)" {
+		return "dev"
 	}
-	return "dev"
+	mv := info.Main.Version
+	for _, s := range info.Settings {
+		if s.Key == "vcs.revision" && !strings.Contains(mv, "+") {
+			return mv + "+checkout"
+		}
+	}
+	return mv
 }
 
 // Execute runs the CLI with the given arguments.
