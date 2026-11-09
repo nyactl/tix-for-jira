@@ -453,6 +453,28 @@ func TestPlanWorklog(t *testing.T) {
 	}
 }
 
+func TestHistoryRedactsPeopleSeenLater(t *testing.T) {
+	t.Parallel()
+	f := fixture(t)
+	f.AddUser(jiratest.User{AccountID: "acc-carol", DisplayName: "Carol Diaz", Email: "carol@example.com"})
+	f.AddUser(jiratest.User{AccountID: "acc-dave", DisplayName: "Dave Kim", Email: "dave@example.com"})
+	f.AddIssue(jiratest.Issue{Key: "PROJ-7", Summary: "Plain", Assignee: "acc-me", Reporter: "acc-me",
+		Changes: []jiratest.Change{
+			{Author: "acc-me", Created: "2026-10-02T09:00:00.000+0000", Field: "summary", FieldType: "jira", FromS: "Plain", ToS: "Ask Carol Diaz and Dave Kim"},
+			{Author: "acc-carol", Created: "2026-10-03T09:00:00.000+0000", Field: "labels", FieldType: "jira", ToS: "auth"},
+			{Author: "acc-me", Created: "2026-10-04T09:00:00.000+0000", Field: "assignee", FieldType: "jira", From: "acc-dave", FromS: "Dave Kim", To: "acc-me", ToS: "Max Mustermann"},
+		}})
+	s := service(t, f, config.PrivacyOwn)
+	hist, err := s.History(context.Background(), "PROJ-7", "", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := json.Marshal(hist)
+	if strings.Contains(string(b), "Carol") || strings.Contains(string(b), "Dave") {
+		t.Errorf("history shows names of people seen later: %s", b)
+	}
+}
+
 func TestParseDuration(t *testing.T) {
 	t.Parallel()
 	ok := map[string]int{"1h 30m": 5400, "1h30m": 5400, "90m": 5400, "1.5h": 5400, "2h": 7200, "1m": 60, " 45m ": 2700}

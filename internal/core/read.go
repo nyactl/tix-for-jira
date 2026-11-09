@@ -387,6 +387,18 @@ func (s *Service) History(ctx context.Context, key, since string, max int) ([]Ch
 	}
 	defs, _ := s.fieldDefs(ctx)
 
+	// Learn everyone first, so names in earlier free text are replaced even
+	// when the person only appears in a later entry.
+	for _, e := range entries {
+		s.user(e.Author)
+		for _, it := range e.Items {
+			if isPerson(it, defs) {
+				s.people.Mention(it.From, it.FromString)
+				s.people.Mention(it.To, it.ToString)
+			}
+		}
+	}
+
 	var out []ChangeView
 	for _, e := range entries {
 		if !cutoff.IsZero() {
@@ -409,7 +421,6 @@ func (s *Service) History(ctx context.Context, key, since string, max int) ([]Ch
 func (s *Service) change(it jira.ChangeItem, defs map[string]jira.Field) FieldChange {
 	c := FieldChange{Field: it.Field}
 	def, known := defs[it.FieldID]
-	isPerson := personFields[strings.ToLower(it.Field)] || (known && def.Schema != nil && def.Schema.Type == "user")
 	isPeople := known && def.Schema != nil && def.Schema.Type == "array" && def.Schema.Items == "user"
 	switch {
 	case isPeople:
@@ -418,7 +429,7 @@ func (s *Service) change(it jira.ChangeItem, defs map[string]jira.Field) FieldCh
 		} else {
 			c.From, c.To = it.FromString, it.ToString
 		}
-	case isPerson:
+	case isPerson(it, defs):
 		// Names in history are from the time of the change, so they are
 		// treated like mention text: redacted, but never the display name.
 		if it.From != "" {
@@ -431,6 +442,11 @@ func (s *Service) change(it jira.ChangeItem, defs map[string]jira.Field) FieldCh
 		c.From, c.To = clip(s.people.Text(it.FromString)), clip(s.people.Text(it.ToString))
 	}
 	return c
+}
+
+func isPerson(it jira.ChangeItem, defs map[string]jira.Field) bool {
+	def, known := defs[it.FieldID]
+	return personFields[strings.ToLower(it.Field)] || (known && def.Schema != nil && def.Schema.Type == "user")
 }
 
 func clip(s string) string {
